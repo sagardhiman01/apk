@@ -129,9 +129,9 @@ app.post('/api/auth/admin-login', authLimiter, (req, res) => {
   }
 
   if (password === adminPassword) {
-    res.json({ success: true, token: 'fake-admin-token-123' }); // Basic token for now
+    res.json({ success: true, token: 'fake-admin-token-123' });
   } else {
-    res.status(401).json({ success: false, error: `Invalid password. Server got: "${password}", Expected: "${adminPassword}"` });
+    res.status(401).json({ success: false, error: `Wrong password. Server has: [${adminPassword}]` });
   }
 });
 
