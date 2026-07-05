@@ -442,6 +442,7 @@ function Dashboard() {
   const [toast, setToast] = useState('');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('');
+  const toastTimer = useRef<any>(null);
 
   const load = useCallback(async () => {
     setSpinning(true);
