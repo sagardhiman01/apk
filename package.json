@@ -1,0 +1,13 @@
+{
+  "name": "ramsun-app",
+  "version": "1.0.0",
+  "description": "Ramsun Solar - Full Stack App",
+  "main": "ramsun-backend/server.js",
+  "scripts": {
+    "start": "node ramsun-backend/server.js",
+    "install-backend": "cd ramsun-backend && npm install"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
