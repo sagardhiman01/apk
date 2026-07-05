@@ -50,16 +50,23 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-// MySQL Connection Setup
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'ramsun_solar',
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
-});
+// MySQL Connection Setup - lazy init so server starts even without DB
+let pool = null;
+function getPool() {
+  if (!pool) {
+    const dbConfig = {
+      host: process.env.DB_HOST || 'localhost',
+      user: process.env.DB_USER || 'root',
+      password: process.env.DB_PASSWORD || process.env.DB_PASS || '',
+      database: process.env.DB_NAME || 'ramsun_solar',
+      waitForConnections: true,
+      connectionLimit: 10,
+      queueLimit: 0
+    };
+    pool = mysql.createPool(dbConfig);
+  }
+  return pool;
+}
 
 // Nodemailer Transporter Setup
 let transporter;
@@ -144,7 +151,7 @@ app.get('/api/projects', async (req, res) => {
       params.push(status);
     }
     query += ' ORDER BY created_at DESC';
-    const [rows] = await pool.query(query, params);
+    const [rows] = await getPool().query(query, params);
     res.json(rows);
   } catch (error) {
     console.error('Error fetching projects:', error.message);
@@ -173,7 +180,7 @@ app.post('/api/projects', async (req, res) => {
     let client_id = generateClientId();
     // In production, you'd check for uniqueness collision in a loop. Assuming 8 random digits won't collide soon.
 
-    const [result] = await pool.query(
+    const [result] = await getPool().query(
       'INSERT INTO projects (client_id, customer_name, phone, email, address, capacity, status, step, site_photo, agreement, quotation) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [client_id, customer_name, phone, email.toLowerCase(), address, capacity, 'Document Upload', 1, site_photo, agreement, quotation]
     );
@@ -203,7 +210,7 @@ app.put('/api/projects/:id/step', async (req, res) => {
     if (isNaN(step) || step < 1 || step > 5) return res.status(400).json({ error: 'Invalid step value (must be 1-5)' });
     if (!status) return res.status(400).json({ error: 'Status is required' });
 
-    await pool.query('UPDATE projects SET step = ?, status = ?, failed_document = ?, rejection_reason = ? WHERE id = ?', [step, status, failed_document, rejection_reason, id]);
+    await getPool().query('UPDATE projects SET step = ?, status = ?, failed_document = ?, rejection_reason = ? WHERE id = ?', [step, status, failed_document, rejection_reason, id]);
     res.json({ success: true });
   } catch (error) {
     console.error('Error updating project:', error.message);
@@ -217,10 +224,10 @@ app.put('/api/projects/:id', async (req, res) => {
     const { id } = req.params;
     const { customer_name, address, contact_number, kw_capacity, aadhar_number, pan_number, meter_number } = req.body;
     
-    const [existing] = await pool.query('SELECT id FROM projects WHERE id = ?', [id]);
+    const [existing] = await getPool().query('SELECT id FROM projects WHERE id = ?', [id]);
     if (existing.length === 0) return res.status(404).json({ error: 'Project not found' });
 
-    await pool.query(
+    await getPool().query(
       `UPDATE projects 
        SET customer_name = ?, address = ?, contact_number = ?, kw_capacity = ?, aadhar_number = ?, pan_number = ?, meter_number = ?
        WHERE id = ?`,
@@ -237,9 +244,9 @@ app.put('/api/projects/:id', async (req, res) => {
 app.put('/api/projects/:id/loan-approve', async (req, res) => {
   try {
     const { id } = req.params;
-    const [existing] = await pool.query('SELECT id FROM projects WHERE id = ?', [id]);
+    const [existing] = await getPool().query('SELECT id FROM projects WHERE id = ?', [id]);
     if (existing.length === 0) return res.status(404).json({ error: 'Project not found' });
-    await pool.query('UPDATE projects SET loan_approved = TRUE WHERE id = ?', [id]);
+    await getPool().query('UPDATE projects SET loan_approved = TRUE WHERE id = ?', [id]);
     res.json({ success: true });
   } catch (error) {
     console.error('Error approving loan:', error.message);
@@ -251,7 +258,7 @@ app.put('/api/projects/:id/loan-approve', async (req, res) => {
 app.delete('/api/projects/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const [result] = await pool.query('DELETE FROM projects WHERE id = ?', [id]);
+    const [result] = await getPool().query('DELETE FROM projects WHERE id = ?', [id]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Project not found' });
     res.json({ success: true, message: 'Project deleted successfully' });
   } catch (error) {
@@ -272,7 +279,7 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
     if (password.length < 6) return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
 
     // Check if email already exists
-    const [users] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
+    const [users] = await getPool().query('SELECT id FROM users WHERE email = ?', [email]);
     if (users.length > 0) {
       return res.status(400).json({ success: false, message: 'Email already registered. Please login.' });
     }
@@ -335,7 +342,7 @@ app.post('/api/auth/verify-register', authLimiter, async (req, res) => {
     const hashedPassword = await bcrypt.hash(storedData.password, 10);
     const defaultRole = 'employee';
 
-    const [result] = await pool.query(
+    const [result] = await getPool().query(
       'INSERT INTO users (email, password, role) VALUES (?, ?, ?)',
       [email, hashedPassword, defaultRole]
     );
@@ -357,7 +364,7 @@ app.post('/api/auth/verify-register', authLimiter, async (req, res) => {
 // 2.5. Fetch all Users (Admin)
 app.get('/api/auth/users', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT id, email, role, created_at FROM users ORDER BY created_at DESC');
+    const [rows] = await getPool().query('SELECT id, email, role, created_at FROM users ORDER BY created_at DESC');
     res.json(rows);
   } catch (error) {
     console.error('Error fetching users:', error);
@@ -375,7 +382,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email and password are required' });
     }
 
-    const [users] = await pool.query('SELECT id, email, password, role FROM users WHERE email = ?', [email]);
+    const [users] = await getPool().query('SELECT id, email, password, role FROM users WHERE email = ?', [email]);
     if (users.length === 0) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
