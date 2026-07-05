@@ -1,0 +1,20 @@
+# Backend env & secrets
+ramsun-backend/.env
+ramsun-backend/node_modules/
+ramsun-backend/uploads/
+
+# Admin node_modules & build
+ramsun-admin/node_modules/
+ramsun-admin/dist/
+ramsun-admin/.env
+
+# Mobile node_modules & expo
+ramsun-mobile/node_modules/
+ramsun-mobile/.expo/
+ramsun-mobile/dist/
+ramsun-mobile/.env
+
+# OS files
+.DS_Store
+Thumbs.db
+*.log
