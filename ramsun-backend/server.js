@@ -122,7 +122,7 @@ function generateClientId() {
 
 app.post('/api/auth/admin-login', authLimiter, (req, res) => {
   const { password } = req.body;
-  const adminPassword = process.env.ADMIN_PASSWORD;
+  const adminPassword = process.env.ADMIN_PASSWORD ? process.env.ADMIN_PASSWORD.trim() : null;
   
   if (!adminPassword) {
     return res.status(500).json({ success: false, error: 'Server misconfiguration: ADMIN_PASSWORD not set' });
@@ -131,7 +131,7 @@ app.post('/api/auth/admin-login', authLimiter, (req, res) => {
   if (password === adminPassword) {
     res.json({ success: true, token: 'fake-admin-token-123' }); // Basic token for now
   } else {
-    res.status(401).json({ success: false, error: 'Invalid password' });
+    res.status(401).json({ success: false, error: 'Invalid password (make sure you type it exactly)' });
   }
 });
 
