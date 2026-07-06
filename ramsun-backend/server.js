@@ -405,6 +405,15 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
   }
 });
 
+// ─── Health Check Endpoint ────────────────────────────────────────────────────
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    message: 'Ramsun Backend is alive!',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // ─── 404 handler ──────────────────────────────────────────────────────────────
 app.use((req, res, next) => {
   if (req.originalUrl.startsWith('/api') || req.originalUrl.startsWith('/uploads')) {
@@ -422,15 +431,6 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 const SERVER_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
-
-// ─── Health Check Endpoint ────────────────────────────────────────────────────
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'ok', 
-    message: 'Ramsun Backend is alive!',
-    timestamp: new Date().toISOString()
-  });
-});
 
 app.listen(PORT, () => {
   console.log(`Ramsun Backend running on ${SERVER_URL}`);
