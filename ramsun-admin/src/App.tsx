@@ -822,14 +822,7 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
       <div className="relative z-10 w-full max-w-sm px-4">
         {/* Logo */}
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-br from-yellow-400 to-orange-500 shadow-2xl shadow-yellow-400/30 mb-5">
-            <svg width="40" height="40" viewBox="0 0 32 32" fill="none">
-              <circle cx="16" cy="16" r="6" fill="#1c1917"><animate attributeName="r" values="5;7;5" dur="3s" repeatCount="indefinite" /></circle>
-              {[0,45,90,135,180,225,270,315].map((deg,i) => (
-                <line key={i} x1={16+9*Math.cos(deg*Math.PI/180)} y1={16+9*Math.sin(deg*Math.PI/180)} x2={16+13*Math.cos(deg*Math.PI/180)} y2={16+13*Math.sin(deg*Math.PI/180)} stroke="#1c1917" strokeWidth="2" strokeLinecap="round"><animate attributeName="opacity" values="1;0.3;1" dur={`${1.5+i*0.15}s`} repeatCount="indefinite" /></line>
-              ))}
-            </svg>
-          </div>
+          <img src="/logo.png" alt="Ramsun Energy Logo" className="w-32 h-auto mx-auto mb-5 object-contain drop-shadow-xl" />
           <h1 className="text-3xl font-black text-white">Ramsun<span className="text-yellow-400">Energy</span></h1>
           <p className="text-slate-500 text-sm mt-2 tracking-wide">Admin Panel • Secure Access</p>
         </div>
@@ -881,7 +874,7 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
     <aside className="w-64 shrink-0 bg-slate-950 text-white flex flex-col min-h-screen">
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-6 border-b border-white/5">
-        <Icons.Sun />
+        <img src="/logo.png" alt="Logo" className="w-10 h-10 object-contain" />
         <div>
           <p className="text-lg font-black leading-none">Ramsun<span className="text-yellow-400">Energy</span></p>
           <p className="text-[10px] text-slate-600 uppercase tracking-widest mt-0.5">Solar CRM</p>
