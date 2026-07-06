@@ -421,6 +421,40 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Ramsun Backend running on http://localhost:${PORT}`);
+const SERVER_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+
+// ─── Health Check Endpoint ────────────────────────────────────────────────────
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    message: 'Ramsun Backend is alive!',
+    timestamp: new Date().toISOString()
+  });
 });
+
+app.listen(PORT, () => {
+  console.log(`Ramsun Backend running on ${SERVER_URL}`);
+
+  // ─── Self-Ping Keep-Alive (Prevents Render free tier sleep) ────────────────
+  // Pings the server every 10 minutes so it never goes idle
+  const PING_INTERVAL = 10 * 60 * 1000; // 10 minutes
+  setInterval(async () => {
+    try {
+      const http = require('http');
+      const https = require('https');
+      const pingUrl = `${SERVER_URL}/api/health`;
+      const client = pingUrl.startsWith('https') ? https : http;
+      
+      client.get(pingUrl, (res) => {
+        console.log(`[Keep-Alive] Ping sent to ${pingUrl} → Status: ${res.statusCode}`);
+      }).on('error', (err) => {
+        console.log(`[Keep-Alive] Ping failed: ${err.message}`);
+      });
+    } catch (err) {
+      console.log('[Keep-Alive] Error:', err.message);
+    }
+  }, PING_INTERVAL);
+
+  console.log(`[Keep-Alive] Self-ping every 10 minutes to prevent sleep.`);
+});
+
