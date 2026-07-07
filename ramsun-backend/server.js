@@ -93,6 +93,16 @@ async function initializeDatabase(dbPool) {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Create reminders table
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS reminders (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        project_id INT,
+        message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
     
     // Check if admin user exists, if not create one
     const adminEmail = 'admin@ramsun.com';
@@ -434,6 +444,56 @@ app.get('/api/auth/users', async (req, res) => {
   } catch (error) {
     console.error('Error fetching users:', error);
     res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+// ─── Reminders Endpoints ──────────────────────────────────────────────────────
+
+app.get('/api/reminders', async (req, res) => {
+  try {
+    const query = `
+      SELECT r.*, p.customer_name, p.client_id, p.phone 
+      FROM reminders r 
+      LEFT JOIN projects p ON r.project_id = p.id 
+      ORDER BY r.created_at DESC
+    `;
+    const [rows] = await getPool().query(query);
+    res.json(rows);
+  } catch (error) {
+    console.error('Error fetching reminders:', error.message);
+    res.status(500).json({ error: 'Unable to fetch reminders' });
+  }
+});
+
+app.post('/api/reminders', async (req, res) => {
+  try {
+    const project_id = parseInt(req.body.project_id);
+    const message = sanitize(req.body.message);
+
+    if (!project_id || !message) {
+      return res.status(400).json({ error: 'project_id and message are required' });
+    }
+
+    const [result] = await getPool().query(
+      'INSERT INTO reminders (project_id, message) VALUES (?, ?)',
+      [project_id, message]
+    );
+    res.json({ success: true, id: result.insertId });
+  } catch (error) {
+    console.error('Error creating reminder:', error.message);
+    res.status(500).json({ error: 'Unable to create reminder' });
+  }
+});
+
+app.delete('/api/reminders/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [result] = await getPool().query('DELETE FROM reminders WHERE id = ?', [id]);
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Reminder not found' });
+    res.json({ success: true, message: 'Reminder deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting reminder:', error.message);
+    res.status(500).json({ error: 'Unable to delete reminder' });
   }
 });
 

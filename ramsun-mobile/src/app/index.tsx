@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   StyleSheet, Text, View, TextInput, TouchableOpacity,
   SafeAreaView, ScrollView, StatusBar, Animated, Easing,
-  ActivityIndicator, Modal, Alert, Dimensions, Platform, Linking,
+  ActivityIndicator, Modal, Alert, Dimensions, Platform, Linking, RefreshControl, Image
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -63,41 +63,22 @@ function FloatingParticle({ x, delay, color, size = 2 }: { x: number; delay: num
   );
 }
 
-// ─── Animated Sun ─────────────────────────────────────────────────────────────
-function AnimatedSun({ size = 80 }: { size?: number }) {
-  const spin = useRef(new Animated.Value(0)).current;
+// ─── Ramsun Logo ───────────────────────────────────────────────────────────────────
+function RamsunLogo({ size = 80 }: { size?: number }) {
   const pulse = useRef(new Animated.Value(1)).current;
   useEffect(() => {
-    Animated.loop(Animated.timing(spin, { toValue: 1, duration: 18000, easing: Easing.linear, useNativeDriver: true })).start();
     Animated.loop(Animated.sequence([
-      Animated.timing(pulse, { toValue: 1.18, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      Animated.timing(pulse, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 1.08, duration: 2200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 1, duration: 2200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
     ])).start();
   }, []);
-  const rot = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  const rays = Array.from({ length: 8 }, (_, i) => i * 45);
-  const dist = size * 0.4;
-  const coreR = size * 0.2;
   return (
     <Animated.View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center', transform: [{ scale: pulse }] }}>
-      <View style={{ position: 'absolute', width: size * 1.6, height: size * 1.6, borderRadius: size * 0.8, backgroundColor: C.gold, opacity: 0.05 }} />
-      <View style={{ position: 'absolute', width: size * 1.1, height: size * 1.1, borderRadius: size * 0.55, backgroundColor: C.gold, opacity: 0.08 }} />
-      <Animated.View style={{ position: 'absolute', width: size, height: size, transform: [{ rotate: rot }] }}>
-        {rays.map(deg => {
-          const rad = ((deg - 90) * Math.PI) / 180;
-          const rl = size * 0.22;
-          return (
-            <View key={deg} style={{
-              position: 'absolute', width: size * 0.07, height: rl,
-              backgroundColor: C.gold, borderRadius: size * 0.035, opacity: 0.8,
-              left: size / 2 - size * 0.035 + Math.cos(rad) * dist,
-              top: size / 2 - rl / 2 + Math.sin(rad) * dist,
-              transform: [{ rotate: `${deg}deg` }],
-            }} />
-          );
-        })}
-      </Animated.View>
-      <View style={{ width: coreR * 2, height: coreR * 2, borderRadius: coreR, backgroundColor: C.gold, shadowColor: C.gold, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 24, elevation: 24 }} />
+      <View style={{ position: 'absolute', width: size * 1.4, height: size * 1.4, borderRadius: size * 0.7, backgroundColor: C.gold, opacity: 0.06 }} />
+      <Image
+        source={require('../../assets/images/ramsun-logo.png')}
+        style={{ width: size, height: size, resizeMode: 'contain' }}
+      />
     </Animated.View>
   );
 }
@@ -300,12 +281,13 @@ function UPCLWaiting({ project, onClose }: { project: any; onClose: () => void }
 }
 
 // ─── PROJECT DETAIL MODAL ─────────────────────────────────────────────────────
-function ProjectDetailModal({ project, visible, onClose, onUpdateStep }: {
-  project: any; visible: boolean; onClose: () => void;
+function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
+  project: any; role: string; visible: boolean; onClose: () => void;
   onUpdateStep: (id: number, step: number, status: string) => Promise<void>;
 }) {
-  const currentStep = project?.step || 0;
+  const currentStep = project?.step ?? 0;
   const [busy, setBusy] = useState(false);
+  const [reminderMsg, setReminderMsg] = useState('');
   const slideY = useRef(new Animated.Value(800)).current;
   const bg = useRef(new Animated.Value(0)).current;
 
@@ -428,7 +410,7 @@ function ProjectDetailModal({ project, visible, onClose, onUpdateStep }: {
               const isNext = currentStep + 1 === s.id;
               return (
                 <TouchableOpacity key={s.id} onPress={() => {
-                  if (!isNext) return;
+                  if (!isNext || role !== 'admin') return;
                   Alert.alert('Mark Complete?', `Mark "${s.label}" as done?`, [
                     { text: 'Cancel', style: 'cancel' },
                     {
@@ -442,7 +424,7 @@ function ProjectDetailModal({ project, visible, onClose, onUpdateStep }: {
                       }
                     }
                   ]);
-                }} disabled={!isNext || busy} activeOpacity={0.75} style={{
+                }} disabled={!isNext || busy || role !== 'admin'} activeOpacity={0.75} style={{
                   flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 18, marginBottom: 10,
                   backgroundColor: done ? C.gold + '15' : isNext ? C.gold + '25' : C.card,
                   borderWidth: 1.5, borderColor: done ? C.gold + '50' : isNext ? C.gold : C.border,
@@ -455,9 +437,9 @@ function ProjectDetailModal({ project, visible, onClose, onUpdateStep }: {
                     <Text style={{ color: C.text2, fontSize: 12, marginTop: 2 }}>{s.desc}</Text>
                   </View>
                   {done && <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: C.gold + '30', alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 16 }}>✓</Text></View>}
-                  {isNext && !busy && <View style={{ backgroundColor: C.gold, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 }}><Text style={{ color: '#000', fontSize: 11, fontWeight: '800' }}>Mark ✓</Text></View>}
-                  {isNext && busy && <SpinLoader color={C.gold} />}
-                  {!done && !isNext && <View style={{ width: 24, height: 24, borderRadius: 8, backgroundColor: C.border }} />}
+                  {isNext && !busy && role === 'admin' && <View style={{ backgroundColor: C.gold, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 }}><Text style={{ color: '#000', fontSize: 11, fontWeight: '800' }}>Mark ✓</Text></View>}
+                  {isNext && busy && role === 'admin' && <SpinLoader color={C.gold} />}
+                  {!done && (!isNext || role !== 'admin') && <View style={{ width: 24, height: 24, borderRadius: 8, backgroundColor: C.border }} />}
                 </TouchableOpacity>
               );
             })}
@@ -522,6 +504,37 @@ function ProjectDetailModal({ project, visible, onClose, onUpdateStep }: {
                     </View>
                   </TouchableOpacity>
                 )}
+              </View>
+            </View>
+
+            {/* Send Reminder */}
+            <View style={{ marginTop: 16 }}>
+              <Text style={{ color: C.text2, fontSize: 11, fontWeight: '800', letterSpacing: 2, marginBottom: 12 }}>SEND REMINDER</Text>
+              <View style={{ backgroundColor: C.card, borderRadius: 20, padding: 16, borderWidth: 1, borderColor: C.border }}>
+                <TextInput 
+                  placeholder="Ping admin about this project..."
+                  placeholderTextColor={C.text3}
+                  value={reminderMsg}
+                  onChangeText={setReminderMsg}
+                  style={{ color: C.text, backgroundColor: C.bg2, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: C.border, marginBottom: 12 }}
+                />
+                <PrimaryBtn label="Send Reminder" onPress={async () => {
+                  if (!reminderMsg.trim()) return;
+                  setBusy(true);
+                  try {
+                    await fetch(`${API_URL}/reminders`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ project_id: project.id, message: reminderMsg.trim() })
+                    });
+                    Alert.alert('Sent', 'Reminder sent to admin.');
+                    setReminderMsg('');
+                  } catch(e) {
+                    Alert.alert('Error', 'Failed to send reminder.');
+                  } finally {
+                    setBusy(false);
+                  }
+                }} loading={busy} disabled={!reminderMsg.trim()} />
               </View>
             </View>
           </ScrollView>
@@ -861,12 +874,16 @@ function DashboardScreen({ role, onLogout }: { role: string; onLogout: () => voi
         </Animated.View>
       )}
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={{ paddingBottom: 120 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={C.gold} />}
+      >
         {/* Header */}
         <Animated.View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20, opacity: headerOp, transform: [{ translateY: headerY }] }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <AnimatedSun size={46} />
+              <RamsunLogo size={46} />
               <View>
                 <Text style={{ color: C.text, fontSize: 24, fontWeight: '900', letterSpacing: -0.5 }}>
                   Ramsun<Text style={{ color: C.gold }}>Solar</Text>
@@ -887,10 +904,10 @@ function DashboardScreen({ role, onLogout }: { role: string; onLogout: () => voi
         </Animated.View>
 
         {/* Stats */}
-        <Animated.ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 10, paddingBottom: 4 }} style={{ opacity: statsOp, marginBottom: 8 }}>
+        <Animated.View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 16, gap: 10, paddingBottom: 4, opacity: statsOp, marginBottom: 8 }}>
           {stats.map((s, i) => (
             <View key={i} style={{
-              backgroundColor: C.card, borderRadius: 22, padding: 18, minWidth: 96, alignItems: 'center',
+              backgroundColor: C.card, borderRadius: 22, padding: 18, width: '48%', alignItems: 'center',
               borderWidth: 1, borderColor: s.color + '35',
               shadowColor: s.color, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 5,
             }}>
@@ -899,7 +916,7 @@ function DashboardScreen({ role, onLogout }: { role: string; onLogout: () => voi
               <View style={{ width: 28, height: 2, backgroundColor: s.color + '50', borderRadius: 1, marginTop: 6 }} />
             </View>
           ))}
-        </Animated.ScrollView>
+        </Animated.View>
 
         {/* Projects */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginTop: 8, marginBottom: 12 }}>
@@ -918,7 +935,7 @@ function DashboardScreen({ role, onLogout }: { role: string; onLogout: () => voi
             </View>
           ) : projects.length === 0 ? (
             <View style={{ alignItems: 'center', paddingVertical: 70, gap: 14 }}>
-              <AnimatedSun size={70} />
+              <RamsunLogo size={70} />
               <Text style={{ color: C.text, fontSize: 20, fontWeight: '800', marginTop: 8 }}>No Projects Yet</Text>
               <Text style={{ color: C.text2, fontSize: 14, textAlign: 'center' }}>Tap the + button below{'\n'}to add your first project</Text>
             </View>
@@ -942,7 +959,7 @@ function DashboardScreen({ role, onLogout }: { role: string; onLogout: () => voi
       </Animated.View>
 
       {selected && (
-        <ProjectDetailModal project={selected} visible={!!selected} onClose={() => setSelected(null)} onUpdateStep={updateStep} />
+        <ProjectDetailModal project={selected} role={role} visible={!!selected} onClose={() => setSelected(null)} onUpdateStep={updateStep} />
       )}
       <NewProjectModal visible={newModal} onClose={() => setNewModal(false)} onSuccess={() => { load(); showToast('Project created successfully! 🎉'); }} />
     </SafeAreaView>
@@ -1041,7 +1058,7 @@ function LoginScreen({ onLogin }: { onLogin: (role: string) => void }) {
         <Animated.View style={{ opacity: fadeIn, alignItems: 'center', width: '100%' }}>
           {/* Logo */}
           <Animated.View style={{ transform: [{ scale: logoScale }], marginBottom: 20, alignItems: 'center' }}>
-            <AnimatedSun size={110} />
+            <RamsunLogo size={110} />
           </Animated.View>
           <Text style={{ color: C.text, fontSize: 40, fontWeight: '900', letterSpacing: -1, textAlign: 'center' }}>
             Ramsun<Text style={{ color: C.gold }}>Solar</Text>
@@ -1159,7 +1176,7 @@ export default function App() {
   if (checking) {
     return (
       <View style={{ flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center', gap: 24 }}>
-        <AnimatedSun size={90} />
+        <RamsunLogo size={90} />
         <SpinLoader color={C.gold} size={28} />
       </View>
     );
