@@ -52,6 +52,67 @@ const upload = multer({ storage: storage });
 
 // MySQL Connection Setup - lazy init so server starts even without DB
 let pool = null;
+
+async function initializeDatabase(dbPool) {
+  try {
+    // Create users table
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        role VARCHAR(50) DEFAULT 'employee',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create projects table
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS projects (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        client_id VARCHAR(50) NOT NULL,
+        customer_name VARCHAR(255) NOT NULL,
+        phone VARCHAR(20),
+        email VARCHAR(255),
+        address TEXT,
+        capacity VARCHAR(50),
+        status VARCHAR(100),
+        step INT DEFAULT 1,
+        site_photo VARCHAR(255),
+        agreement VARCHAR(255),
+        quotation VARCHAR(255),
+        failed_document VARCHAR(100),
+        rejection_reason TEXT,
+        contact_number VARCHAR(20),
+        kw_capacity VARCHAR(50),
+        aadhar_number VARCHAR(50),
+        pan_number VARCHAR(50),
+        meter_number VARCHAR(50),
+        loan_approved BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    // Check if admin user exists, if not create one
+    const adminEmail = 'admin@ramsun.com';
+    const [adminCheck] = await dbPool.query('SELECT id FROM users WHERE email = ?', [adminEmail]);
+    if (adminCheck.length === 0) {
+      const bcrypt = require('bcryptjs');
+      const adminPassword = process.env.ADMIN_PASSWORD || 'RamsunAdmin2024';
+      const hashedPassword = await bcrypt.hash(adminPassword, 10);
+      await dbPool.query(
+        'INSERT INTO users (email, password, role) VALUES (?, ?, ?)',
+        [adminEmail, hashedPassword, 'admin']
+      );
+      console.log('Admin user created automatically.');
+    }
+    
+    console.log('Database tables initialized successfully!');
+  } catch (error) {
+    console.error('Failed to initialize database tables:', error.message);
+  }
+}
+
 function getPool() {
   if (!pool) {
     const dbConfig = {
@@ -64,6 +125,9 @@ function getPool() {
       queueLimit: 0
     };
     pool = mysql.createPool(dbConfig);
+    
+    // Initialize tables silently in the background
+    initializeDatabase(pool);
   }
   return pool;
 }
@@ -401,7 +465,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     });
   } catch (error) {
     console.error('Error logging in:', error.message);
-    res.status(500).json({ success: false, message: 'Server error during login' });
+    res.status(500).json({ success: false, message: 'Server error during login', error: error.message, stack: error.stack, code: error.code });
   }
 });
 
