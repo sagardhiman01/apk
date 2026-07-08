@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      EXPO_PUBLIC_API_URL: https://ramson-mobile-app.onrender.com/api
+      EXPO_PUBLIC_API_URL: https://dimgrey-peafowl-209919.hostingersite.com/api
 
     steps:
       - name: Checkout repository
