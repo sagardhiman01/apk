@@ -19,7 +19,7 @@ jobs:
         with:
           node-version: 20
           cache: 'npm'
-          cache-dependency-path: 'package-lock.json'
+          cache-dependency-path: 'ramsun-mobile/package-lock.json'
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -28,18 +28,22 @@ jobs:
           java-version: '17'
 
       - name: Install dependencies
-        run: npm install
+        run: |
+          cd ramsun-mobile
+          npm install
 
       - name: Generate Android project (Expo Prebuild)
-        run: npx expo prebuild --platform android --clean
+        run: |
+          cd ramsun-mobile
+          npx expo prebuild --platform android --clean
 
       - name: Build APK (Release)
         run: |
-          cd android
+          cd ramsun-mobile/android
           ./gradlew assembleRelease
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: android/app/build/outputs/apk/release/app-release.apk
+          path: ramsun-mobile/android/app/build/outputs/apk/release/app-release.apk
