@@ -76,7 +76,7 @@ function RamsunLogo({ size = 80 }: { size?: number }) {
     <Animated.View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center', transform: [{ scale: pulse }] }}>
       <View style={{ position: 'absolute', width: size * 1.4, height: size * 1.4, borderRadius: size * 0.7, backgroundColor: C.gold, opacity: 0.06 }} />
       <Image
-        source={require('../../assets/images/ramsun-logo.png')}
+        source={require('../../assets/images/ramsun-logo.webp')}
         style={{ width: size, height: size, resizeMode: 'contain' }}
       />
     </Animated.View>
