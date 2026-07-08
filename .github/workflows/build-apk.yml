@@ -10,6 +10,9 @@ jobs:
   build-android:
     runs-on: ubuntu-latest
 
+    env:
+      EXPO_PUBLIC_API_URL: https://ramson-mobile-app.onrender.com/api
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
