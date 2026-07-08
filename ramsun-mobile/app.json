@@ -33,14 +33,6 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ],
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "kotlinVersion": "1.9.24"
-          }
-        }
       ]
     ],
     "runtimeVersion": "1.0.0",
