@@ -35,10 +35,7 @@
         }
       ]
     ],
-    "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
-    },
+    "runtimeVersion": "1.0.0",
     "extra": {
       "router": {},
       "eas": {
