@@ -71,6 +71,7 @@ async function initializeDatabase(dbPool) {
     await dbPool.query(`
       CREATE TABLE IF NOT EXISTS projects (
         id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT,
         client_id VARCHAR(50) NOT NULL,
         customer_name VARCHAR(255) NOT NULL,
         phone VARCHAR(20),
@@ -80,6 +81,7 @@ async function initializeDatabase(dbPool) {
         status VARCHAR(100),
         step INT DEFAULT 1,
         site_photo VARCHAR(255),
+        site_location VARCHAR(500),
         agreement VARCHAR(255),
         quotation VARCHAR(255),
         failed_document VARCHAR(100),
@@ -93,6 +95,16 @@ async function initializeDatabase(dbPool) {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Add user_id column if old DB doesn't have it (migration)
+    try {
+      await dbPool.query('ALTER TABLE projects ADD COLUMN user_id INT AFTER id');
+    } catch(e) { /* column already exists, ignore */ }
+
+    // Add site_location column if old DB doesn't have it (migration)
+    try {
+      await dbPool.query('ALTER TABLE projects ADD COLUMN site_location VARCHAR(500) AFTER site_photo');
+    } catch(e) { /* column already exists, ignore */ }
 
     // Create reminders table
     await dbPool.query(`
@@ -214,9 +226,15 @@ app.post('/api/auth/admin-login', authLimiter, (req, res) => {
 // (We will update those further down, but for now just replacing the header)
 app.get('/api/projects', async (req, res) => {
   try {
-    const { search, status } = req.query;
+    const { search, status, user_id } = req.query;
     let query = 'SELECT * FROM projects WHERE 1=1';
     let params = [];
+
+    // TENANT ISOLATION: filter by user_id so each account sees only their own projects
+    if (user_id) {
+      query += ' AND user_id = ?';
+      params.push(parseInt(user_id));
+    }
     if (search) {
       query += ' AND (client_id LIKE ? OR customer_name LIKE ? OR phone LIKE ?)';
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
@@ -242,8 +260,10 @@ app.post('/api/projects', async (req, res) => {
     const address = sanitize(req.body.address);
     const capacity = sanitize(req.body.capacity);
     const site_photo = req.body.site_photo || null;
+    const site_location = sanitize(req.body.site_location || '');
     const agreement = req.body.agreement || null;
     const quotation = req.body.quotation || null;
+    const user_id = req.body.user_id ? parseInt(req.body.user_id) : null;
 
     const errors = [];
     if (!customer_name || customer_name.length < 2) errors.push('Customer name is required (min 2 chars)');
@@ -253,11 +273,10 @@ app.post('/api/projects', async (req, res) => {
     if (errors.length > 0) return res.status(400).json({ error: 'Validation failed', details: errors });
 
     let client_id = generateClientId();
-    // In production, you'd check for uniqueness collision in a loop. Assuming 8 random digits won't collide soon.
 
     const [result] = await getPool().query(
-      'INSERT INTO projects (client_id, customer_name, phone, email, address, capacity, status, step, site_photo, agreement, quotation) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [client_id, customer_name, phone, email.toLowerCase(), address, capacity, 'Document Upload', 1, site_photo, agreement, quotation]
+      'INSERT INTO projects (user_id, client_id, customer_name, phone, email, address, capacity, status, step, site_photo, site_location, agreement, quotation) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [user_id, client_id, customer_name, phone, email.toLowerCase(), address, capacity, 'Document Upload', 1, site_photo, site_location || null, agreement, quotation]
     );
     res.json({ success: true, id: result.insertId });
   } catch (error) {
@@ -522,7 +541,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     res.json({
       success: true,
       token: 'mock-jwt-token',
-      user: { id: user.id, email: user.email, role: user.role }
+      user: { id: user.id, email: user.email, role: user.role, user_id: user.id }
     });
   } catch (error) {
     console.error('Error logging in:', error.message);

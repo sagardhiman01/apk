@@ -159,6 +159,7 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
   const [formData, setFormData] = useState({
     customer_name: project.customer_name || project.customer || '',
     address: project.address || '',
+    site_location: project.site_location || '',
     contact_number: project.contact_number || '',
     kw_capacity: project.kw_capacity || '',
     aadhar_number: project.aadhar_number || '',
@@ -374,6 +375,10 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
               <div>
                 <label className="text-xs font-bold text-slate-500 block mb-1">Address</label>
                 <input type="text" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 block mb-1">Site Location</label>
+                <input type="text" value={formData.site_location} onChange={e => setFormData({...formData, site_location: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

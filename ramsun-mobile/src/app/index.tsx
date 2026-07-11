@@ -451,6 +451,7 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
                 ['🆔 Client ID', project.client_id || project.id],
                 ['📧 Email', project.email],
                 ['📍 Address', project.address],
+                ['📌 Site Location', project.site_location],
                 ['⚡ Capacity', project.capacity ? `${project.capacity} kW` : '—'],
                 ['📊 Status', project.status],
               ].map(([l, v]) => (
@@ -548,7 +549,7 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
 function NewProjectModal({ visible, onClose, onSuccess }: { visible: boolean; onClose: () => void; onSuccess: () => void }) {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [data, setData] = useState({ customer_name: '', phone: '', email: '', address: '', capacity: '', site_photo: null as any, agreement: null as any, quotation: null as any });
+  const [data, setData] = useState({ customer_name: '', phone: '', email: '', address: '', capacity: '', site_photo: null as any, site_location: '', agreement: null as any, quotation: null as any });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const slideY = useRef(new Animated.Value(800)).current;
   const bg = useRef(new Animated.Value(0)).current;
@@ -569,7 +570,7 @@ function NewProjectModal({ visible, onClose, onSuccess }: { visible: boolean; on
     ]).start(() => {
       slideY.setValue(800); bg.setValue(0);
       setStep(0); setErrors({});
-      setData({ customer_name: '', phone: '', email: '', address: '', capacity: '', site_photo: null, agreement: null, quotation: null });
+      setData({ customer_name: '', phone: '', email: '', address: '', capacity: '', site_photo: null, site_location: '', agreement: null, quotation: null });
       onClose();
     });
   };
@@ -630,9 +631,22 @@ function NewProjectModal({ visible, onClose, onSuccess }: { visible: boolean; on
       if (data.agreement) agreement = await uploadFile(data.agreement, 'agreement.pdf');
       if (data.quotation) quotation = await uploadFile(data.quotation, 'quotation.pdf');
 
+      const userId = await AsyncStorage.getItem('ramsun_user_id').catch(() => null);
+
       const res = await fetch(`${API_URL}/projects`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customer_name: data.customer_name.trim(), phone: data.phone.trim(), email: data.email.trim().toLowerCase(), address: data.address.trim(), capacity: data.capacity.trim(), site_photo, agreement, quotation }),
+        body: JSON.stringify({
+          customer_name: data.customer_name.trim(),
+          phone: data.phone.trim(),
+          email: data.email.trim().toLowerCase(),
+          address: data.address.trim(),
+          capacity: data.capacity.trim(),
+          site_photo,
+          site_location: data.site_location.trim(),
+          agreement,
+          quotation,
+          user_id: userId ? parseInt(userId) : null,
+        }),
       });
       if (!res.ok) { const j = await res.json(); throw new Error(j.error || 'Failed'); }
       onSuccess();
@@ -678,6 +692,25 @@ function NewProjectModal({ visible, onClose, onSuccess }: { visible: boolean; on
 
                 <Text style={{ color: C.text2, fontSize: 10, fontWeight: '800', letterSpacing: 2, marginBottom: 12, marginTop: 4 }}>DOCUMENTS (Optional)</Text>
                 <FileBtn icon="📷" label="Site Photo" hint="Camera or Gallery" value={data.site_photo} onPress={pickPhoto} color={C.blue} />
+
+                {/* Site Location field below site photo */}
+                <View style={{ marginBottom: 10 }}>
+                  <Text style={{ color: C.text2, fontSize: 10, fontWeight: '800', letterSpacing: 2, marginBottom: 8 }}>SITE LOCATION (Where is this site?)</Text>
+                  <TextInput
+                    style={{
+                      backgroundColor: C.bg2, borderWidth: 1.5, borderColor: C.border,
+                      borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14,
+                      fontSize: 15, color: C.text,
+                    }}
+                    placeholder="e.g. Village Nainital, Near Water Tank, Uttarakhand"
+                    placeholderTextColor={C.text3}
+                    value={data.site_location}
+                    onChangeText={(t: string) => setData(d => ({ ...d, site_location: t }))}
+                    multiline
+                    numberOfLines={2}
+                  />
+                </View>
+
                 <FileBtn icon="📄" label="Signed Agreement" hint="Upload PDF or image" value={data.agreement} onPress={() => pickDoc('agreement')} color={C.green} />
                 <FileBtn icon="📋" label="Quotation (Back Office)" hint="Upload PDF or image" value={data.quotation} onPress={() => pickDoc('quotation')} color={C.purple} />
 
@@ -810,7 +843,9 @@ function DashboardScreen({ role, onLogout }: { role: string; onLogout: () => voi
   const load = useCallback(async () => {
     setRefreshing(true);
     try {
-      const r = await fetch(`${API_URL}/projects`);
+      const userId = await AsyncStorage.getItem('ramsun_user_id').catch(() => null);
+      const userParam = userId ? `?user_id=${userId}` : '';
+      const r = await fetch(`${API_URL}/projects${userParam}`);
       if (!r.ok) throw new Error();
       setProjects(await r.json());
     } catch { }
@@ -1009,7 +1044,13 @@ function LoginScreen({ onLogin }: { onLogin: (role: string) => void }) {
       if (mode === 'login') {
         const r = await fetch(`${API_URL}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim().toLowerCase(), password }), signal: controller.signal });
         const d = await r.json();
-        if (d.success) onLogin(d.user?.role || 'employee');
+        if (d.success) {
+          // Save user_id for tenant isolation
+          if (d.user?.id) {
+            await AsyncStorage.setItem('ramsun_user_id', String(d.user.id)).catch(() => {});
+          }
+          onLogin(d.user?.role || 'employee');
+        }
         else setError(d.message || 'Invalid credentials. Try again.');
       } else {
         const r = await fetch(`${API_URL}/auth/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim().toLowerCase(), password }), signal: controller.signal });
@@ -1034,7 +1075,12 @@ function LoginScreen({ onLogin }: { onLogin: (role: string) => void }) {
     try {
       const r = await fetch(`${API_URL}/auth/verify-register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim().toLowerCase(), otp }), signal: controller.signal });
       const d = await r.json();
-      if (d.success) onLogin(d.user?.role || 'employee');
+      if (d.success) {
+        if (d.user?.id) {
+          await AsyncStorage.setItem('ramsun_user_id', String(d.user.id)).catch(() => {});
+        }
+        onLogin(d.user?.role || 'employee');
+      }
       else setError(d.message || 'Invalid OTP. Please try again.');
     } catch (e: any) {
       if (e?.name === 'AbortError') setError('Request timed out. Try again.');
@@ -1169,7 +1215,8 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('ramsun_user_role').catch(() => { });
+    await AsyncStorage.removeItem('ramsun_user_role').catch(() => {});
+    await AsyncStorage.removeItem('ramsun_user_id').catch(() => {});
     setRole(null);
   };
 
