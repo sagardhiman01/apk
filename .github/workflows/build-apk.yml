@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      EXPO_PUBLIC_API_URL: https://serve-thorough-wiley-tropical.trycloudflare.com/api
+      EXPO_PUBLIC_API_URL: https://ramsunenergy.online/api
 
     steps:
       - name: Checkout repository
