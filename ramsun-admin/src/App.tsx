@@ -1095,7 +1095,7 @@ function Sidebar({ onLogout, open, onClose }: { onLogout?: () => void; open?: bo
         >
           <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" />
           <aside
-            className="absolute left-0 top-0 bottom-0 w-72 bg-slate-950 text-white flex flex-col shadow-2xl"
+            className="absolute left-0 top-0 bottom-0 w-64 bg-slate-950 text-white flex flex-col shadow-2xl"
             style={{ animation: 'slideRight .25s ease' }}
             onClick={e => e.stopPropagation()}
           >
@@ -1105,7 +1105,7 @@ function Sidebar({ onLogout, open, onClose }: { onLogout?: () => void; open?: bo
       )}
 
       {/* Desktop Sidebar — always visible on md+ */}
-      <aside className="hidden md:flex w-56 lg:w-64 shrink-0 bg-slate-950 text-white flex-col min-h-screen sticky top-0 h-screen">
+      <aside className="hidden md:flex w-48 lg:w-56 shrink-0 bg-slate-950 text-white flex-col min-h-screen sticky top-0 h-screen">
         <SidebarContent onLogout={onLogout} />
       </aside>
     </>
