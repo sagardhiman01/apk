@@ -524,34 +524,34 @@ function Dashboard() {
   const inProcess = projects.filter(p => (p.step ?? 0) > 0 && (p.step ?? 0) < 4).length;
 
   return (
-    <div className="p-6 lg:p-8 min-h-full">
+    <div className="p-4 sm:p-6 lg:p-8 min-h-full">
       {/* Toast */}
       {toast && (
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-2 bg-emerald-600 text-white text-sm font-semibold px-4 py-3 rounded-2xl shadow-2xl shadow-emerald-900/30"
+        <div className="fixed top-16 md:top-5 right-4 z-50 flex items-center gap-2 bg-emerald-600 text-white text-sm font-semibold px-4 py-3 rounded-2xl shadow-2xl shadow-emerald-900/30"
           style={{ animation: 'slideDown .3s ease' }}>
           <span className="text-emerald-200">✓</span> {toast}
         </div>
       )}
 
       {/* Page header */}
-      <div className="flex flex-wrap gap-4 justify-between items-start mb-8">
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-start mb-6 md:mb-8">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-black text-slate-800 tracking-tight">Overview</h1>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-800 tracking-tight">Overview</h1>
           <p className="text-slate-400 mt-1 text-sm">Ramsun Solar · Project Management Dashboard</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
           <input
             type="text"
             placeholder="Search ID, Name, Phone..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && load()}
-            className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 min-w-[200px]"
+            className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 w-full sm:min-w-[200px]"
           />
           <select
             value={filter}
             onChange={e => { setFilter(e.target.value); setTimeout(load, 0); }}
-            className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
+            className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 w-full sm:w-auto"
           >
             <option value="">All Statuses</option>
             <option value="Document Upload">Document Upload</option>
@@ -562,7 +562,7 @@ function Dashboard() {
           </select>
           <button
             onClick={load}
-            className="flex items-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-bold text-sm px-5 py-2.5 rounded-xl shadow-md shadow-yellow-200 hover:shadow-lg transition-all"
+            className="flex items-center justify-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-bold text-sm px-5 py-2.5 rounded-xl shadow-md shadow-yellow-200 hover:shadow-lg transition-all w-full sm:w-auto"
           >
             <span className={spinning ? 'animate-spin inline-block' : 'inline-block'}><Icons.RotateCw /></span>
             Refresh
@@ -571,7 +571,7 @@ function Dashboard() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 md:mb-8">
         <StatCard label="Total Projects"    value={projects.length} sub="+8%" gradient="bg-gradient-to-br from-blue-500 to-indigo-700"   icon={<Icons.Briefcase />} />
         <StatCard label="Pending Approval"  value={pending}         sub="+3"  gradient="bg-gradient-to-br from-orange-400 to-rose-600"   icon={<Icons.Zap />} />
         <StatCard label="In Progress"       value={inProcess}       sub="→"   gradient="bg-gradient-to-br from-violet-500 to-purple-700" icon={<Icons.CreditCard />} />
@@ -597,61 +597,103 @@ function Dashboard() {
             <p className="text-slate-400 text-sm">Add projects from the backend to see them here.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead>
-                <tr className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wider text-left">
-                  <th className="px-6 py-3 font-semibold">#</th>
-                  <th className="px-6 py-3 font-semibold">Customer</th>
-                  <th className="px-6 py-3 font-semibold">Status</th>
-                  <th className="px-6 py-3 font-semibold">Progress</th>
-                  <th className="px-6 py-3 font-semibold">Loan</th>
-                  <th className="px-6 py-3 font-semibold">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {projects.map(p => (
-                  <tr key={p.id} className="group hover:bg-yellow-50/50 transition-colors">
-                    <td className="px-6 py-4 text-sm font-bold text-slate-500">
-                      {p.client_id ? `#${p.client_id}` : `#${p.id}`}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center text-white font-black text-xs flex-shrink-0">
-                          {(p.customer_name || p.customer || '?')[0].toUpperCase()}
-                        </div>
-                        <span className="text-sm font-semibold text-slate-800">{p.customer_name || p.customer || '—'}</span>
+          <>
+            {/* Mobile/Tablet card list (hidden on large desktop) */}
+            <div className="lg:hidden divide-y divide-slate-100">
+              {projects.map(p => (
+                <div key={p.id} className="p-4 sm:p-5 hover:bg-yellow-50/30 transition-colors">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center text-white font-black text-sm flex-shrink-0">
+                        {(p.customer_name || p.customer || '?')[0].toUpperCase()}
                       </div>
-                    </td>
-                    <td className="px-6 py-4"><StatusBadge status={p.status} /></td>
-                    <td className="px-6 py-4 w-40">
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-gradient-to-r from-yellow-400 to-emerald-500 rounded-full transition-all duration-700"
-                            style={{ width: `${((p.step ?? 0) / 4) * 100}%` }} />
-                        </div>
-                        <span className="text-xs text-slate-400 font-medium w-7 shrink-0">{p.step ?? 0}/4</span>
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">{p.customer_name || p.customer || '—'}</p>
+                        <p className="text-xs text-slate-400 font-mono">{p.client_id ? `#${p.client_id}` : `#${p.id}`}</p>
                       </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      {p.loan_approved
-                        ? <span className="text-xs bg-emerald-100 text-emerald-700 font-bold px-2 py-1 rounded-lg">✅ Approved</span>
-                        : <span className="text-xs bg-orange-100 text-orange-600 font-bold px-2 py-1 rounded-lg">⏳ Pending</span>
-                      }
-                    </td>
-                    <td className="px-6 py-4">
-                      <button
-                        onClick={() => setSelected(p)}
-                        className="flex items-center gap-1.5 text-xs font-bold bg-slate-900 group-hover:bg-yellow-400 text-white group-hover:text-slate-900 px-4 py-2 rounded-xl transition-all duration-200"
-                      >
-                        Edit <Icons.ChevronRight />
-                      </button>
-                    </td>
+                    </div>
+                    <button
+                      onClick={() => setSelected(p)}
+                      className="flex items-center gap-1.5 text-xs font-bold bg-slate-900 text-white px-3.5 py-2 rounded-xl transition-all duration-200 active:scale-95"
+                    >
+                      Edit <Icons.ChevronRight />
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    <StatusBadge status={p.status} />
+                    {p.loan_approved
+                      ? <span className="text-xs bg-emerald-100 text-emerald-700 font-bold px-2 py-1 rounded-lg">✅ Loan OK</span>
+                      : <span className="text-xs bg-orange-100 text-orange-600 font-bold px-2 py-1 rounded-lg">⏳ Loan Pending</span>
+                    }
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-yellow-400 to-emerald-500 rounded-full transition-all duration-700"
+                        style={{ width: `${((p.step ?? 0) / 4) * 100}%` }} />
+                    </div>
+                    <span className="text-xs text-slate-400 font-medium shrink-0">{p.step ?? 0}/4 steps</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop table (hidden on small screens) */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="min-w-full">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wider text-left">
+                    <th className="px-6 py-3 font-semibold">#</th>
+                    <th className="px-6 py-3 font-semibold">Customer</th>
+                    <th className="px-6 py-3 font-semibold">Status</th>
+                    <th className="px-6 py-3 font-semibold">Progress</th>
+                    <th className="px-6 py-3 font-semibold">Loan</th>
+                    <th className="px-6 py-3 font-semibold">Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {projects.map(p => (
+                    <tr key={p.id} className="group hover:bg-yellow-50/50 transition-colors">
+                      <td className="px-6 py-4 text-sm font-bold text-slate-500">
+                        {p.client_id ? `#${p.client_id}` : `#${p.id}`}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center text-white font-black text-xs flex-shrink-0">
+                            {(p.customer_name || p.customer || '?')[0].toUpperCase()}
+                          </div>
+                          <span className="text-sm font-semibold text-slate-800">{p.customer_name || p.customer || '—'}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4"><StatusBadge status={p.status} /></td>
+                      <td className="px-6 py-4 w-40">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-gradient-to-r from-yellow-400 to-emerald-500 rounded-full transition-all duration-700"
+                              style={{ width: `${((p.step ?? 0) / 4) * 100}%` }} />
+                          </div>
+                          <span className="text-xs text-slate-400 font-medium w-7 shrink-0">{p.step ?? 0}/4</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {p.loan_approved
+                          ? <span className="text-xs bg-emerald-100 text-emerald-700 font-bold px-2 py-1 rounded-lg">✅ Approved</span>
+                          : <span className="text-xs bg-orange-100 text-orange-600 font-bold px-2 py-1 rounded-lg">⏳ Pending</span>
+                        }
+                      </td>
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => setSelected(p)}
+                          className="flex items-center gap-1.5 text-xs font-bold bg-slate-900 group-hover:bg-yellow-400 text-white group-hover:text-slate-900 px-4 py-2 rounded-xl transition-all duration-200"
+                        >
+                          Edit <Icons.ChevronRight />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
@@ -708,9 +750,9 @@ function UsersPage() {
       .catch(() => setLoading(false));
   }, []);
   return (
-    <div className="p-8" style={{animation:'slideUp .3s ease'}}>
+    <div className="p-4 sm:p-6 md:p-8" style={{animation:'slideUp .3s ease'}}>
       <div className="mb-6">
-        <h1 className="text-2xl font-black text-slate-800">Users & Access</h1>
+        <h1 className="text-xl sm:text-2xl font-black text-slate-800">Users & Access</h1>
         <p className="text-slate-500 text-sm mt-1">All registered app users and their roles</p>
       </div>
       {loading ? (
@@ -768,10 +810,10 @@ function RemindersPage() {
   };
 
   return (
-    <div className="p-8" style={{animation:'slideUp .3s ease'}}>
+    <div className="p-4 sm:p-6 md:p-8" style={{animation:'slideUp .3s ease'}}>
       <div className="mb-6 flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-black text-slate-800">Reminders</h1>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-800">Reminders</h1>
           <p className="text-slate-500 text-sm mt-1">Notifications from staff</p>
         </div>
         <button onClick={load} className="text-sm bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-bold px-4 py-2 rounded-xl shadow-md">Refresh</button>
@@ -811,9 +853,9 @@ function RemindersPage() {
 /* ─── Settings Page ───────────────────────────────────────────────────────── */
 function SettingsPage() {
   return (
-    <div className="p-8" style={{animation:'slideUp .3s ease'}}>
+    <div className="p-4 sm:p-6 md:p-8" style={{animation:'slideUp .3s ease'}}>
       <div className="mb-6">
-        <h1 className="text-2xl font-black text-slate-800">Settings</h1>
+        <h1 className="text-xl sm:text-2xl font-black text-slate-800">Settings</h1>
         <p className="text-slate-500 text-sm mt-1">System configuration and admin preferences</p>
       </div>
       <div className="grid gap-4 max-w-2xl">
@@ -939,43 +981,88 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
   );
 }
 
-/* ─── Sidebar ──────────────────────────────────────────────────────────────── */
-
-function Sidebar({ onLogout }: { onLogout?: () => void }) {
+/* ─── Mobile Header Bar ───────────────────────────────────────────────────── */
+function MobileHeader({ onMenuOpen, onLogout }: { onMenuOpen: () => void; onLogout?: () => void }) {
   return (
-    <aside className="w-64 shrink-0 bg-slate-950 text-white flex flex-col min-h-screen">
+    <header className="md:hidden fixed top-0 left-0 right-0 z-40 bg-slate-950 border-b border-white/5 flex items-center justify-between px-4 py-3">
+      <div className="flex items-center gap-2.5">
+        <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" />
+        <p className="text-base font-black text-white leading-none">Ramsun<span className="text-yellow-400">Energy</span></p>
+      </div>
+      <div className="flex items-center gap-2">
+        {onLogout && (
+          <button onClick={onLogout} className="text-red-400 hover:text-red-300 text-xs font-bold px-3 py-1.5 rounded-lg border border-red-900/40 hover:bg-red-950 transition-colors">
+            🚪
+          </button>
+        )}
+        <button
+          onClick={onMenuOpen}
+          className="flex flex-col gap-1.5 p-2 rounded-xl hover:bg-slate-800 transition-colors"
+          aria-label="Open menu"
+        >
+          <span className="w-5 h-0.5 bg-white rounded-full" />
+          <span className="w-5 h-0.5 bg-white rounded-full" />
+          <span className="w-4 h-0.5 bg-yellow-400 rounded-full" />
+        </button>
+      </div>
+    </header>
+  );
+}
+
+/* ─── Sidebar ──────────────────────────────────────────────────────────────── */
+const NAV_LINKS = [
+  { to: '/', label: 'Dashboard',    icon: 'Dashboard',    end: true },
+  { to: '/projects',     label: 'Projects',     icon: 'Briefcase' },
+  { to: '/loans',        label: 'Loans',        icon: 'CreditCard' },
+  { to: '/installations',label: 'Installations',icon: 'Zap' },
+  { to: '/reminders',    label: 'Reminders',    icon: 'Bell' },
+  { to: '/users',        label: 'Users',        icon: 'Users' },
+  { to: '/settings',     label: 'Settings',     icon: 'Settings' },
+];
+
+function SidebarContent({ onLogout, onClose }: { onLogout?: () => void; onClose?: () => void }) {
+  return (
+    <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="flex items-center gap-3 px-6 py-6 border-b border-white/5">
-        <img src="/logo.png" alt="Logo" className="w-10 h-10 object-contain" />
-        <div>
-          <p className="text-lg font-black leading-none">Ramsun<span className="text-yellow-400">Energy</span></p>
-          <p className="text-[10px] text-slate-600 uppercase tracking-widest mt-0.5">Solar CRM</p>
+      <div className="flex items-center justify-between px-6 py-6 border-b border-white/5">
+        <div className="flex items-center gap-3">
+          <img src="/logo.png" alt="Logo" className="w-10 h-10 object-contain" />
+          <div>
+            <p className="text-lg font-black leading-none">Ramsun<span className="text-yellow-400">Energy</span></p>
+            <p className="text-[10px] text-slate-600 uppercase tracking-widest mt-0.5">Solar CRM</p>
+          </div>
         </div>
+        {onClose && (
+          <button onClick={onClose} className="md:hidden text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors">
+            <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Nav */}
-      <div className="mt-8 space-y-1.5 flex-1 px-4">
-        <NavLink to="/" end className={({ isActive }) => `flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-semibold text-sm ${isActive ? 'bg-yellow-400 text-slate-900 shadow-md shadow-yellow-400/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>
-          <Icons.Dashboard /> Dashboard
-        </NavLink>
-        <NavLink to="/projects" className={({ isActive }) => `flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-semibold text-sm ${isActive ? 'bg-yellow-400 text-slate-900 shadow-md shadow-yellow-400/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>
-          <Icons.Briefcase /> Projects
-        </NavLink>
-        <NavLink to="/loans" className={({ isActive }) => `flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-semibold text-sm ${isActive ? 'bg-yellow-400 text-slate-900 shadow-md shadow-yellow-400/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>
-          <Icons.CreditCard /> Loans
-        </NavLink>
-        <NavLink to="/installations" className={({ isActive }) => `flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-semibold text-sm ${isActive ? 'bg-yellow-400 text-slate-900 shadow-md shadow-yellow-400/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>
-          <Icons.Zap /> Installations
-        </NavLink>
-        <NavLink to="/reminders" className={({ isActive }) => `flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-semibold text-sm ${isActive ? 'bg-yellow-400 text-slate-900 shadow-md shadow-yellow-400/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>
-          <Icons.Bell /> Reminders
-        </NavLink>
-        <NavLink to="/users" className={({ isActive }) => `flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-semibold text-sm ${isActive ? 'bg-yellow-400 text-slate-900 shadow-md shadow-yellow-400/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>
-          <Icons.Users /> Users
-        </NavLink>
-        <NavLink to="/settings" className={({ isActive }) => `flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-semibold text-sm ${isActive ? 'bg-yellow-400 text-slate-900 shadow-md shadow-yellow-400/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>
-          <Icons.Settings /> Settings
-        </NavLink>
+      <div className="mt-6 space-y-1.5 flex-1 px-4">
+        {NAV_LINKS.map(({ to, label, icon, end }) => {
+          const Ic = Icons[icon as keyof typeof Icons];
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              onClick={onClose}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-semibold text-sm ${
+                  isActive
+                    ? 'bg-yellow-400 text-slate-900 shadow-md shadow-yellow-400/20'
+                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                }`
+              }
+            >
+              <Ic /> {label}
+            </NavLink>
+          );
+        })}
       </div>
 
       {/* User + Logout */}
@@ -983,7 +1070,7 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
         <div className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center font-black text-slate-900 text-sm shrink-0">A</div>
           <div className="min-w-0">
-            <p className="text-sm font-semibold leading-none">Admin User</p>
+            <p className="text-sm font-semibold leading-none text-white">Admin User</p>
             <p className="text-xs text-slate-500 mt-0.5 truncate">ramsun.admin</p>
           </div>
         </div>
@@ -993,7 +1080,35 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
           </button>
         )}
       </div>
-    </aside>
+    </div>
+  );
+}
+
+function Sidebar({ onLogout, open, onClose }: { onLogout?: () => void; open?: boolean; onClose?: () => void }) {
+  return (
+    <>
+      {/* Mobile Drawer Overlay */}
+      {open && (
+        <div
+          className="fixed inset-0 z-50 md:hidden"
+          onClick={onClose}
+        >
+          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" />
+          <aside
+            className="absolute left-0 top-0 bottom-0 w-72 bg-slate-950 text-white flex flex-col shadow-2xl"
+            style={{ animation: 'slideRight .25s ease' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <SidebarContent onLogout={onLogout} onClose={onClose} />
+          </aside>
+        </div>
+      )}
+
+      {/* Desktop Sidebar — always visible on md+ */}
+      <aside className="hidden md:flex w-56 lg:w-64 shrink-0 bg-slate-950 text-white flex-col min-h-screen sticky top-0 h-screen">
+        <SidebarContent onLogout={onLogout} />
+      </aside>
+    </>
   );
 }
 
@@ -1001,30 +1116,50 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
 /* ─── App ──────────────────────────────────────────────────────────────────── */
 export default function App() {
   const [authed, setAuthed] = useState(() => sessionStorage.getItem('ramsun_admin') === '1');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   if (!authed) return (
     <>
-      <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}`}</style>
+      <style>{`
+        @keyframes slideUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes slideRight{from{opacity:0;transform:translateX(-100%)}to{opacity:1;transform:translateX(0)}}
+      `}</style>
       <LoginPage onLogin={() => { sessionStorage.setItem('ramsun_admin','1'); setAuthed(true); }} />
     </>
   );
+
+  const handleLogout = () => { sessionStorage.removeItem('ramsun_admin'); setAuthed(false); };
+
   return (
     <>
       <style>{`
         @keyframes slideUp   { from { opacity:0; transform:translateY(24px) } to { opacity:1; transform:translateY(0) } }
         @keyframes slideDown { from { opacity:0; transform:translateY(-16px) } to { opacity:1; transform:translateY(0) } }
+        @keyframes slideRight{ from { opacity:0; transform:translateX(-100%) } to { opacity:1; transform:translateX(0) } }
+        @keyframes shimmer   { 0% { transform: translateX(-100%) skewX(-20deg); } 100% { transform: translateX(200%) skewX(-20deg); } }
       `}</style>
       <Router>
         <div className="flex min-h-screen bg-slate-100 font-sans">
-          <Sidebar onLogout={() => { sessionStorage.removeItem('ramsun_admin'); setAuthed(false); }} />
-          <div className="flex-1 overflow-auto flex flex-col min-h-screen">
+          {/* Mobile top bar */}
+          <MobileHeader onMenuOpen={() => setSidebarOpen(true)} onLogout={handleLogout} />
+
+          {/* Sidebar */}
+          <Sidebar
+            onLogout={handleLogout}
+            open={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+          />
+
+          {/* Main content — add top padding on mobile to clear fixed header */}
+          <div className="flex-1 overflow-auto flex flex-col min-h-screen pt-14 md:pt-0">
             <Routes>
               <Route path="/" element={<Dashboard />} />
-              <Route path="/projects"     element={<Dashboard />} />
-              <Route path="/loans"        element={<Dashboard />} />
-              <Route path="/installations"element={<Dashboard />} />
-              <Route path="/reminders"    element={<RemindersPage />} />
-              <Route path="/users"        element={<UsersPage />} />
-              <Route path="/settings"     element={<SettingsPage />} />
+              <Route path="/projects"      element={<Dashboard />} />
+              <Route path="/loans"         element={<Dashboard />} />
+              <Route path="/installations" element={<Dashboard />} />
+              <Route path="/reminders"     element={<RemindersPage />} />
+              <Route path="/users"         element={<UsersPage />} />
+              <Route path="/settings"      element={<SettingsPage />} />
             </Routes>
             <footer className="mt-auto py-4 text-center text-xs text-slate-400 border-t border-slate-200">
               made by <span className="text-yellow-600 font-semibold">mac studio hub</span>
