@@ -1,0 +1,47 @@
+name: Deploy Admin Panel to Hostinger
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'ramsun-admin/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'ramsun-admin/package-lock.json'
+
+      - name: Install dependencies
+        run: |
+          cd ramsun-admin
+          npm install
+
+      - name: Build admin panel
+        run: |
+          cd ramsun-admin
+          npm run build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+
+      - name: Deploy to Hostinger via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./ramsun-admin/dist/
+          server-dir: ${{ secrets.FTP_SERVER_DIR }}
+          exclude: |
+            **/.git*
+            **/.git*/**
