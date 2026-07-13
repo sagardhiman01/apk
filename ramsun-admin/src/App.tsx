@@ -571,7 +571,7 @@ function Dashboard() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 md:mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 md:mb-8">
         <StatCard label="Total Projects"    value={projects.length} sub="+8%" gradient="bg-gradient-to-br from-blue-500 to-indigo-700"   icon={<Icons.Briefcase />} />
         <StatCard label="Pending Approval"  value={pending}         sub="+3"  gradient="bg-gradient-to-br from-orange-400 to-rose-600"   icon={<Icons.Zap />} />
         <StatCard label="In Progress"       value={inProcess}       sub="→"   gradient="bg-gradient-to-br from-violet-500 to-purple-700" icon={<Icons.CreditCard />} />
@@ -579,7 +579,7 @@ function Dashboard() {
       </div>
 
       {/* Table card */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-xl shadow-slate-100 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-xl shadow-slate-100 overflow-hidden overflow-x-auto">
         <div className="flex justify-between items-center px-6 py-4 border-b border-slate-100">
           <h2 className="font-black text-slate-800">All Projects</h2>
           <span className="text-xs text-slate-400 bg-slate-50 rounded-lg px-3 py-1">{projects.length} total records</span>
@@ -984,7 +984,7 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
 /* ─── Mobile Header Bar ───────────────────────────────────────────────────── */
 function MobileHeader({ onMenuOpen, onLogout }: { onMenuOpen: () => void; onLogout?: () => void }) {
   return (
-    <header className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-slate-950 border-b border-white/5 flex items-center justify-between px-4 py-3">
+    <header className="md:hidden fixed top-0 left-0 right-0 z-40 bg-slate-950 border-b border-white/5 flex items-center justify-between px-4 py-3">
       <div className="flex items-center gap-2.5">
         <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" />
         <p className="text-base font-black text-white leading-none">Ramsun<span className="text-yellow-400">Energy</span></p>
@@ -1033,7 +1033,7 @@ function SidebarContent({ onLogout, onClose }: { onLogout?: () => void; onClose?
           </div>
         </div>
         {onClose && (
-          <button onClick={onClose} className="lg:hidden text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors">
+          <button onClick={onClose} className="md:hidden text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors">
             <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
@@ -1090,7 +1090,7 @@ function Sidebar({ onLogout, open, onClose }: { onLogout?: () => void; open?: bo
       {/* Mobile Drawer Overlay */}
       {open && (
         <div
-          className="fixed inset-0 z-50 lg:hidden"
+          className="fixed inset-0 z-50 md:hidden"
           onClick={onClose}
         >
           <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" />
@@ -1104,8 +1104,8 @@ function Sidebar({ onLogout, open, onClose }: { onLogout?: () => void; open?: bo
         </div>
       )}
 
-      {/* Desktop Sidebar — always visible on lg+ */}
-      <aside className="hidden lg:flex w-48 lg:w-56 shrink-0 bg-slate-950 text-white flex-col min-h-screen sticky top-0 h-screen">
+      {/* Desktop Sidebar — always visible on md+ */}
+      <aside className="hidden md:flex w-48 lg:w-56 shrink-0 bg-slate-950 text-white flex-col min-h-screen sticky top-0 h-screen">
         <SidebarContent onLogout={onLogout} />
       </aside>
     </>
@@ -1151,7 +1151,7 @@ export default function App() {
           />
 
           {/* Main content — add top padding on mobile to clear fixed header */}
-          <div className="flex-1 overflow-auto flex flex-col min-h-screen pt-14 lg:pt-0">
+          <div className="flex-1 overflow-auto flex flex-col min-h-screen pt-14 md:pt-0">
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/projects"      element={<Dashboard />} />
