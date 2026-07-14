@@ -200,24 +200,25 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
       <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-md" />
 
       <div
-        className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden"
+        className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg flex flex-col"
+        style={{ animation: 'slideUp .25s ease', maxHeight: '92vh' }}
         onClick={e => e.stopPropagation()}
-        style={{ animation: 'slideUp .25s ease' }}
       >
-        {/* Top gradient header */}
-        <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-6 pt-6 pb-5">
-          <div className="flex justify-between items-start">
-            <div>
+        {/* Top gradient header - fixed */}
+        <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-4 sm:px-6 pt-5 pb-4 flex-shrink-0">
+          <div className="flex justify-between items-center gap-2">
+            <div className="min-w-0">
               <span className="text-yellow-400 text-xs font-bold tracking-widest uppercase">Project Details</span>
-              <h2 className="text-white text-xl font-black mt-1">
+              <h2 className="text-white text-base sm:text-xl font-black mt-0.5 truncate">
                 #{project.id} · {project.customer_name || project.customer || '—'}
               </h2>
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => setMode(mode === 'steps' ? 'edit' : 'steps')} className="text-slate-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-xl p-2 transition-colors text-xs font-bold flex items-center gap-1">
-                {mode === 'steps' ? '✏️ Edit Info' : '📋 Steps'}
+            <div className="flex gap-1.5 flex-shrink-0">
+              <button onClick={() => setMode(mode === 'steps' ? 'edit' : 'steps')} className="text-slate-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-xl px-2.5 py-2 transition-colors text-xs font-bold flex items-center gap-1 whitespace-nowrap">
+                <span>{mode === 'steps' ? '✏️' : '📋'}</span>
+                <span className="hidden sm:inline">{mode === 'steps' ? 'Edit Info' : 'Steps'}</span>
               </button>
-              <button onClick={onClose} className="text-slate-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-xl p-2 transition-colors">
+              <button onClick={onClose} className="text-slate-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-xl p-2 transition-colors flex-shrink-0">
                 <Icons.X />
               </button>
             </div>
@@ -258,10 +259,12 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
           </div>
         </div>
 
+        {/* Scrollable content area */}
+        <div className="flex-1 overflow-y-auto">
         {mode === 'steps' ? (
           <>
             {/* Steps list */}
-            <div className="p-5 space-y-2.5 max-h-[50vh] overflow-y-auto">
+            <div className="p-4 sm:p-5 space-y-2.5">
               <p className="text-xs font-bold text-slate-400 tracking-widest uppercase mb-3">Workflow Steps</p>
               {steps.map(s => {
                 const done = cur >= s.id;
@@ -366,7 +369,7 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
             )}
           </>
         ) : (
-          <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
+          <div className="p-4 sm:p-5 space-y-4">
             <div className="space-y-3">
               <div>
                 <label className="text-xs font-bold text-slate-500 block mb-1">Customer Name</label>
@@ -419,8 +422,10 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
             </button>
           </div>
         )}
+        </div>{/* end scrollable */}
 
-        <div className="px-5 pb-5 flex justify-between">
+        {/* Footer - always visible */}
+        <div className="px-4 sm:px-5 py-4 flex justify-between border-t border-slate-100 flex-shrink-0 bg-white">
           <button 
             disabled={busy}
             onClick={async () => {
