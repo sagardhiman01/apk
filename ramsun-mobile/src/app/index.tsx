@@ -310,18 +310,20 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
   if (!project) return null;
 
   const STEPS = [
-    { id: 1, icon: '📄', label: 'Doc Upload', desc: 'Required documents uploaded' },
+    { id: 1, icon: '📄', label: 'Registration', desc: 'Files login, quotation, and agreement' },
     { id: 2, icon: '📋', label: 'UPCL Approval', desc: 'UPCL documents verified' },
     { id: 3, icon: '📝', label: 'Loan Apply', desc: 'Applied on UPCL portal' },
-    { id: 4, icon: '🏦', label: 'Loan Process', desc: 'Bank processing' },
-    { id: 5, icon: '⚡', label: 'Installation', desc: 'Solar system installed' },
+    { id: 4, icon: '🏦', label: '1st Disbursed', desc: 'First loan amount disbursed' },
+    { id: 5, icon: '🚚', label: 'Material Disp.', desc: 'Materials dispatched to site' },
+    { id: 6, icon: '⚡', label: 'Installation', desc: 'Install, collect serials, geotag' },
+    { id: 7, icon: '💸', label: '2nd Disbursed', desc: 'Second loan amount disbursed' },
+    { id: 8, icon: '📤', label: 'Upload Inst.', desc: 'Upload installation with DCR' },
+    { id: 9, icon: '🎁', label: 'Subsidy Redeem', desc: 'Subsidy claimed and redeemed' },
   ];
 
   // Show UPCL waiting screen if loan is in process but not fully approved/installed, and we want to show a loading screen.
   // Actually, let's just show the full modal for now so employees can see all steps.
   // We'll remove the forced UPCLWaiting for employees so they can mark steps.
-  // If we need a dedicated UPCL view, it can be a separate button.
-
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={close}>
       <Animated.View style={{ flex: 1, backgroundColor: bg.interpolate({ inputRange: [0, 1], outputRange: ['rgba(0,0,0,0)', 'rgba(0,0,0,0.88)'] }), justifyContent: 'flex-end' }}>
@@ -762,9 +764,9 @@ function ProjectCard({ project, onPress, index }: { project: any; onPress: () =>
     Animated.spring(anim, { toValue: 1, tension: 55, friction: 11, delay: index * 65, useNativeDriver: true }).start();
   }, []);
 
-  const pct = (((project.step || 1) - 1) / 4) * 100;
-  const stepColors = [C.text3, C.blue, C.purple, C.gold, C.green, C.green];
-  const col = stepColors[Math.min(project.step || 1, 5)];
+  const pct = (((project.step || 1) - 1) / 8) * 100;
+  const stepColors = [C.text3, C.blue, C.purple, C.gold, C.orange, C.green, C.gold, C.blue, C.teal, C.green];
+  const col = stepColors[Math.min(project.step || 1, 9)];
 
   return (
     <Animated.View style={{ opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [28, 0] }) }, { scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) }] }}>

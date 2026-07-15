@@ -167,14 +167,18 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
     meter_number: project.meter_number || '',
   });
   const steps = [
-    { id: 1, status: 'Document Upload', icon: '📄', desc: 'Client uploads required documents' },
+    { id: 1, status: 'Registration',    icon: '📄', desc: 'Files login, quotation, and agreement' },
     { id: 2, status: 'UPCL Approval',   icon: '📋', desc: 'Upload and verify UPCL documents' },
     { id: 3, status: 'Loan Apply',      icon: '📝', desc: 'Apply for loan on UPCL portal' },
-    { id: 4, status: 'Loan Process',    icon: '🏦', desc: 'Wait for bank approval' },
-    { id: 5, status: 'Installation',    icon: '⚡', desc: 'Solar panels installed & commissioned' },
+    { id: 4, status: '1st Disbursed',   icon: '🏦', desc: 'First loan amount disbursed' },
+    { id: 5, status: 'Material Disp.',  icon: '🚚', desc: 'Materials dispatched to site' },
+    { id: 6, status: 'Installation',    icon: '⚡', desc: 'Install, collect serials, geotag' },
+    { id: 7, status: '2nd Disbursed',   icon: '💸', desc: 'Second loan amount disbursed' },
+    { id: 8, status: 'Upload Inst.',    icon: '📤', desc: 'Upload installation with DCR' },
+    { id: 9, status: 'Subsidy Redeem',  icon: '🎁', desc: 'Subsidy claimed and redeemed' },
   ];
   const cur = project.step ?? 1;
-  const pct = Math.round(((cur - 1) / 4) * 100);
+  const pct = Math.round(((cur - 1) / 8) * 100);
 
   const [rejectDoc, setRejectDoc] = useState('');
   const [rejectReason, setRejectReason] = useState('');
