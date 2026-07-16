@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, NavLink, useLocation } from 'react-router-dom';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 
@@ -455,6 +455,7 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
 
 /* ─── Dashboard ────────────────────────────────────────────────────────────── */
 function Dashboard() {
+  const loc = useLocation();
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<any>(null);
@@ -528,9 +529,15 @@ function Dashboard() {
     } catch { /* swallowed */ }
   };
 
-  const done = projects.filter(p => (p.step ?? 0) >= 4).length;
-  const pending = projects.filter(p => !p.step || p.step < 1).length;
-  const inProcess = projects.filter(p => (p.step ?? 0) > 0 && (p.step ?? 0) < 4).length;
+  const displayProjects = projects.filter(p => {
+    if (loc.pathname === '/loans') return [3, 4, 7].includes(p.step);
+    if (loc.pathname === '/installations') return [5, 6, 8].includes(p.step);
+    return true; // '/projects' or '/'
+  });
+
+  const done = displayProjects.filter(p => (p.step ?? 0) >= 9).length;
+  const pending = displayProjects.filter(p => !p.step || p.step < 1).length;
+  const inProcess = displayProjects.filter(p => (p.step ?? 0) > 0 && (p.step ?? 0) < 9).length;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-full">
@@ -563,11 +570,15 @@ function Dashboard() {
             className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 w-full sm:w-auto"
           >
             <option value="">All Statuses</option>
-            <option value="Document Upload">Document Upload</option>
+            <option value="Registration">Registration</option>
             <option value="UPCL Approval">UPCL Approval</option>
             <option value="Loan Apply">Loan Apply</option>
-            <option value="Loan Process">Loan Process</option>
+            <option value="1st Disbursed">1st Disbursed</option>
+            <option value="Material Disp.">Material Disp.</option>
             <option value="Installation">Installation</option>
+            <option value="2nd Disbursed">2nd Disbursed</option>
+            <option value="Upload Inst.">Upload Inst.</option>
+            <option value="Subsidy Redeem">Subsidy Redeem</option>
           </select>
           <button
             onClick={load}
@@ -580,8 +591,8 @@ function Dashboard() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 md:mb-8">
-        <StatCard label="Total Projects"    value={projects.length} sub="+8%" gradient="bg-gradient-to-br from-blue-500 to-indigo-700"   icon={<Icons.Briefcase />} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 md:mb-8">
+        <StatCard label="Total Projects"    value={displayProjects.length} sub="+8%" gradient="bg-gradient-to-br from-blue-500 to-indigo-700"   icon={<Icons.Briefcase />} />
         <StatCard label="Pending Approval"  value={pending}         sub="+3"  gradient="bg-gradient-to-br from-orange-400 to-rose-600"   icon={<Icons.Zap />} />
         <StatCard label="In Progress"       value={inProcess}       sub="→"   gradient="bg-gradient-to-br from-violet-500 to-purple-700" icon={<Icons.CreditCard />} />
         <StatCard label="Completed"         value={done}            sub="+5"  gradient="bg-gradient-to-br from-emerald-400 to-teal-600"  icon={<Icons.Check />} />
@@ -591,7 +602,7 @@ function Dashboard() {
       <div className="bg-white rounded-2xl border border-slate-100 shadow-xl shadow-slate-100 overflow-hidden overflow-x-auto">
         <div className="flex justify-between items-center px-6 py-4 border-b border-slate-100">
           <h2 className="font-black text-slate-800">All Projects</h2>
-          <span className="text-xs text-slate-400 bg-slate-50 rounded-lg px-3 py-1">{projects.length} total records</span>
+          <span className="text-xs text-slate-400 bg-slate-50 rounded-lg px-3 py-1">{displayProjects.length} total records</span>
         </div>
 
         {loading ? (
@@ -599,7 +610,7 @@ function Dashboard() {
             <div className="w-10 h-10 border-[3px] border-yellow-400 border-t-transparent rounded-full animate-spin" />
             <p className="text-slate-400 text-sm">Fetching projects…</p>
           </div>
-        ) : projects.length === 0 ? (
+        ) : displayProjects.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-2">
             <div className="text-5xl">☀️</div>
             <p className="font-bold text-slate-600 mt-2">No projects yet</p>
@@ -609,7 +620,7 @@ function Dashboard() {
           <>
             {/* Mobile/Tablet card list (hidden on large desktop) */}
             <div className="lg:hidden divide-y divide-slate-100">
-              {projects.map(p => (
+              {displayProjects.map(p => (
                 <div key={p.id} className="p-4 sm:p-5 hover:bg-yellow-50/30 transition-colors">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
@@ -638,9 +649,9 @@ function Dashboard() {
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                       <div className="h-full bg-gradient-to-r from-yellow-400 to-emerald-500 rounded-full transition-all duration-700"
-                        style={{ width: `${((p.step ?? 0) / 4) * 100}%` }} />
+                        style={{ width: `${((p.step ?? 0) / 9) * 100}%` }} />
                     </div>
-                    <span className="text-xs text-slate-400 font-medium shrink-0">{p.step ?? 0}/4 steps</span>
+                    <span className="text-xs text-slate-400 font-medium shrink-0">{p.step ?? 0}/9 steps</span>
                   </div>
                 </div>
               ))}
@@ -660,7 +671,7 @@ function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {projects.map(p => (
+                  {displayProjects.map(p => (
                     <tr key={p.id} className="group hover:bg-yellow-50/50 transition-colors">
                       <td className="px-6 py-4 text-sm font-bold text-slate-500">
                         {p.client_id ? `#${p.client_id}` : `#${p.id}`}
