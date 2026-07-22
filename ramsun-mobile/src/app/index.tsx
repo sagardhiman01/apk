@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
@@ -182,12 +183,12 @@ function FileBtn({ icon, label, hint, value, onPress, color }: { icon: string; l
       <TouchableOpacity onPress={handlePress} activeOpacity={0.8} style={{
         flexDirection: 'row', alignItems: 'center', gap: 14,
         padding: 16, borderRadius: 18, marginBottom: 10,
-        backgroundColor: done ? color + '15' : C.card,
-        borderWidth: 1.5, borderColor: done ? color + '70' : C.border,
+        backgroundColor: done ? color + '15' : C.gold + '10',
+        borderWidth: 1.5, borderColor: done ? color + '70' : C.gold + '40',
         borderStyle: done ? 'solid' : 'dashed',
       }}>
-        <View style={{ width: 46, height: 46, borderRadius: 14, backgroundColor: done ? color + '25' : C.border, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ fontSize: 22 }}>{done ? '✓' : icon}</Text>
+        <View style={{ width: 46, height: 46, borderRadius: 14, backgroundColor: done ? color + '25' : C.gold + '25', alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name={done ? 'checkmark' : icon as any} size={22} color={done ? color : C.gold} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={{ color: done ? color : C.text, fontSize: 14, fontWeight: '700' }}>{label}</Text>
@@ -309,16 +310,54 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
 
   if (!project) return null;
 
+  const uploadStep8Photo = async (field: 'inst_photo_1' | 'inst_photo_2') => {
+    try {
+      setBusy(true);
+      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.7 });
+      if (!res.canceled && res.assets && res.assets.length > 0) {
+        const asset = res.assets[0];
+        const form = new FormData();
+        const fileName = asset.uri.split('/').pop() || 'photo.jpg';
+        const mimeType = fileName.endsWith('.png') ? 'image/png' : 'image/jpeg';
+        if (Platform.OS === 'web') {
+          const blobRes = await fetch(asset.uri);
+          const blob = await blobRes.blob();
+          form.append('file', blob, fileName);
+        } else {
+          form.append('file', { uri: asset.uri, name: fileName, type: mimeType } as any);
+        }
+        const uploadRes = await fetch(`${API_URL}/upload`, { method: 'POST', body: form });
+        const json = await uploadRes.json();
+        if (json.success) {
+          const updateRes = await fetch(`${API_URL}/projects/${project.id}/document`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [field]: json.filePath })
+          });
+          if (updateRes.ok) {
+            Alert.alert('Success', 'Photo uploaded successfully.');
+            onClose(); // close to refresh
+          } else Alert.alert('Error', 'Failed to update document.');
+        } else {
+          Alert.alert('Error', 'Upload failed.');
+        }
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Something went wrong.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const STEPS = [
-    { id: 1, icon: '📄', label: 'Registration', desc: 'Files login, quotation, and agreement' },
-    { id: 2, icon: '📋', label: 'UPCL Approval', desc: 'UPCL documents verified' },
-    { id: 3, icon: '📝', label: 'Loan Apply', desc: 'Applied on UPCL portal' },
-    { id: 4, icon: '🏦', label: '1st Disbursed', desc: 'First loan amount disbursed' },
-    { id: 5, icon: '🚚', label: 'Material Disp.', desc: 'Materials dispatched to site' },
-    { id: 6, icon: '⚡', label: 'Installation', desc: 'Install, collect serials, geotag' },
-    { id: 7, icon: '💸', label: '2nd Disbursed', desc: 'Second loan amount disbursed' },
-    { id: 8, icon: '📤', label: 'Upload Inst.', desc: 'Upload installation with DCR' },
-    { id: 9, icon: '🎁', label: 'Subsidy Redeem', desc: 'Subsidy claimed and redeemed' },
+    { id: 1, icon: 'document-text', label: 'Registration', desc: 'Files login, quotation, and agreement' },
+    { id: 2, icon: 'clipboard', label: 'UPCL Approval', desc: 'UPCL documents verified' },
+    { id: 3, icon: 'create', label: 'Loan Apply', desc: 'Applied on UPCL portal' },
+    { id: 4, icon: 'cash', label: '1st Disbursed', desc: 'First loan amount disbursed' },
+    { id: 5, icon: 'cube', label: 'Material Disp.', desc: 'Materials dispatched to site' },
+    { id: 6, icon: 'flash', label: 'Installation', desc: 'Install, collect serials, geotag' },
+    { id: 7, icon: 'cash', label: '2nd Disbursed', desc: 'Second loan amount disbursed' },
+    { id: 8, icon: 'cloud-upload', label: 'Upload Inst.', desc: 'Upload installation with DCR' },
+    { id: 9, icon: 'gift', label: 'Subsidy Redeem', desc: 'Subsidy claimed and redeemed' },
   ];
 
   // Show UPCL waiting screen if loan is in process but not fully approved/installed, and we want to show a loading screen.
@@ -387,7 +426,7 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
                       const res = await fetch(`${API_URL}/upload`, { method: 'POST', body: form });
                       const json = await res.json();
                       if (json.success) {
-                        const updateRes = await fetch(`${API_URL}/projects/${project.id}`, {
+                        const updateRes = await fetch(`${API_URL}/projects/${project.id}/document`, {
                           method: 'PUT', headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ [project.failed_document]: json.filePath, failed_document: null, rejection_reason: null })
                         });
@@ -411,38 +450,50 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
               const done = currentStep >= s.id;
               const isNext = currentStep + 1 === s.id;
               return (
-                <TouchableOpacity key={s.id} onPress={() => {
-                  if (!isNext || role !== 'admin') return;
-                  Alert.alert('Mark Complete?', `Mark "${s.label}" as done?`, [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                      text: 'Confirm', onPress: async () => {
-                        setBusy(true);
-                        try {
-                          await onUpdateStep(project.id, s.id, s.label);
-                        } finally {
-                          setBusy(false);
+                <View key={s.id} style={{ marginBottom: 10 }}>
+                  <TouchableOpacity onPress={() => {
+                    if (!isNext || role !== 'admin') return;
+                    Alert.alert('Mark Complete?', `Mark "${s.label}" as done?`, [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Confirm', onPress: async () => {
+                          setBusy(true);
+                          try {
+                            await onUpdateStep(project.id, s.id, s.label);
+                          } finally {
+                            setBusy(false);
+                          }
                         }
                       }
-                    }
-                  ]);
-                }} disabled={!isNext || busy || role !== 'admin'} activeOpacity={0.75} style={{
-                  flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 18, marginBottom: 10,
-                  backgroundColor: done ? C.gold + '15' : isNext ? C.gold + '25' : C.card,
-                  borderWidth: 1.5, borderColor: done ? C.gold + '50' : isNext ? C.gold : C.border,
-                }}>
-                  <View style={{ width: 46, height: 46, borderRadius: 14, backgroundColor: (done || isNext) ? C.gold + '25' : C.border, alignItems: 'center', justifyContent: 'center' }}>
-                    {isNext ? <SpinLoader color={C.gold} /> : <Text style={{ fontSize: 22, textShadowColor: C.gold, textShadowRadius: 8 }}>{s.icon}</Text>}
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: (done || isNext) ? C.gold : C.text2, fontSize: 15, fontWeight: '700' }}>{s.label}</Text>
-                    <Text style={{ color: C.text2, fontSize: 12, marginTop: 2 }}>{s.desc}</Text>
-                  </View>
-                  {done && <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: C.gold + '30', alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 16 }}>✓</Text></View>}
-                  {isNext && !busy && role === 'admin' && <View style={{ backgroundColor: C.gold, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 }}><Text style={{ color: '#000', fontSize: 11, fontWeight: '800' }}>Mark ✓</Text></View>}
-                  {isNext && busy && role === 'admin' && <SpinLoader color={C.gold} />}
-                  {!done && (!isNext || role !== 'admin') && <View style={{ width: 24, height: 24, borderRadius: 8, backgroundColor: C.border }} />}
-                </TouchableOpacity>
+                    ]);
+                  }} disabled={!isNext || busy || role !== 'admin'} activeOpacity={0.75} style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 18,
+                    backgroundColor: done ? C.gold + '15' : isNext ? C.gold + '25' : C.card,
+                    borderWidth: 1.5, borderColor: done ? C.gold + '50' : isNext ? C.gold : C.border,
+                  }}>
+                    <View style={{ width: 46, height: 46, borderRadius: 14, backgroundColor: (done || isNext) ? C.gold + '25' : C.border, alignItems: 'center', justifyContent: 'center' }}>
+                      {isNext ? <SpinLoader color={C.gold} /> : <Ionicons name={s.icon as any} size={22} color={C.gold} />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: (done || isNext) ? C.gold : C.text2, fontSize: 15, fontWeight: '700' }}>{s.label}</Text>
+                      <Text style={{ color: C.text2, fontSize: 12, marginTop: 2 }}>{s.desc}</Text>
+                    </View>
+                    {done && <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: C.gold + '30', alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 16 }}>✓</Text></View>}
+                    {isNext && !busy && role === 'admin' && <View style={{ backgroundColor: C.gold, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 }}><Text style={{ color: '#000', fontSize: 11, fontWeight: '800' }}>Mark ✓</Text></View>}
+                    {isNext && busy && role === 'admin' && <SpinLoader color={C.gold} />}
+                    {!done && (!isNext || role !== 'admin') && <View style={{ width: 24, height: 24, borderRadius: 8, backgroundColor: C.border }} />}
+                  </TouchableOpacity>
+                  {s.id === 8 && (
+                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, paddingHorizontal: 4 }}>
+                      <TouchableOpacity onPress={() => uploadStep8Photo('inst_photo_1')} style={{ flex: 1, height: 50, borderRadius: 12, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: project.inst_photo_1 ? C.gold : C.borderHi, borderStyle: project.inst_photo_1 ? 'solid' : 'dashed' }}>
+                        {project.inst_photo_1 ? <Text style={{ color: C.gold, fontSize: 12, fontWeight: '600' }}>✓ Photo 1</Text> : <Ionicons name="add" size={20} color={C.text2} />}
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => uploadStep8Photo('inst_photo_2')} style={{ flex: 1, height: 50, borderRadius: 12, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: project.inst_photo_2 ? C.gold : C.borderHi, borderStyle: project.inst_photo_2 ? 'solid' : 'dashed' }}>
+                        {project.inst_photo_2 ? <Text style={{ color: C.gold, fontSize: 12, fontWeight: '600' }}>✓ Photo 2</Text> : <Ionicons name="add" size={20} color={C.text2} />}
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
               );
             })}
 
@@ -693,7 +744,7 @@ function NewProjectModal({ visible, onClose, onSuccess }: { visible: boolean; on
                   error={errors.email} />
 
                 <Text style={{ color: C.text2, fontSize: 10, fontWeight: '800', letterSpacing: 2, marginBottom: 12, marginTop: 4 }}>DOCUMENTS (Optional)</Text>
-                <FileBtn icon="📷" label="Site Photo" hint="Camera or Gallery" value={data.site_photo} onPress={pickPhoto} color={C.blue} />
+                <FileBtn icon="camera" label="Site Photo" hint="Camera or Gallery" value={data.site_photo} onPress={pickPhoto} color={C.blue} />
 
                 {/* Site Location field below site photo */}
                 <View style={{ marginBottom: 10 }}>
@@ -713,8 +764,8 @@ function NewProjectModal({ visible, onClose, onSuccess }: { visible: boolean; on
                   />
                 </View>
 
-                <FileBtn icon="📄" label="Signed Agreement" hint="Upload PDF or image" value={data.agreement} onPress={() => pickDoc('agreement')} color={C.green} />
-                <FileBtn icon="📋" label="Quotation (Back Office)" hint="Upload PDF or image" value={data.quotation} onPress={() => pickDoc('quotation')} color={C.purple} />
+                <FileBtn icon="document" label="Signed Agreement" hint="Upload PDF or image" value={data.agreement} onPress={() => pickDoc('agreement')} color={C.green} />
+                <FileBtn icon="clipboard" label="Quotation (Back Office)" hint="Upload PDF or image" value={data.quotation} onPress={() => pickDoc('quotation')} color={C.purple} />
 
                 <View style={{ marginTop: 8 }}>
                   <PrimaryBtn label="Next: Site Info →" onPress={goNext} />
