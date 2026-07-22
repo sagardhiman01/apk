@@ -518,13 +518,13 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
             {/* Files */}
             <View style={{ marginTop: 8 }}>
               <Text style={{ color: C.text2, fontSize: 11, fontWeight: '800', letterSpacing: 2, marginBottom: 12 }}>UPLOADED DOCUMENTS</Text>
-              {!(project.site_photo || project.agreement || project.quotation) && (
+              {!(project.site_photo || project.agreement || project.quotation || project.inst_photo_1 || project.inst_photo_2) && (
                 <Text style={{ color: C.text3, fontSize: 12, fontStyle: 'italic', marginBottom: 12 }}>No documents uploaded yet.</Text>
               )}
               <View style={{ gap: 8 }}>
                 {project.site_photo && (
-                  <TouchableOpacity onPress={() => Linking.openURL(`${API_URL}${project.site_photo}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.blueGlow, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.blue + '40' }}>
-                    <Text style={{ fontSize: 26 }}>📷</Text>
+                  <TouchableOpacity onPress={() => Linking.openURL(project.site_photo.startsWith('http') ? project.site_photo : `${API_URL.replace('/api', '')}${project.site_photo}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.blueGlow, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.blue + '40' }}>
+                    <Ionicons name="camera" size={26} color={C.blue} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: C.blue, fontSize: 14, fontWeight: '700' }}>Site Photo</Text>
                       <Text style={{ color: C.text2, fontSize: 11 }}>Tap to download / view</Text>
@@ -535,8 +535,8 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
                   </TouchableOpacity>
                 )}
                 {project.agreement && (
-                  <TouchableOpacity onPress={() => Linking.openURL(`${API_URL}${project.agreement}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.greenGlow, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.green + '40' }}>
-                    <Text style={{ fontSize: 26 }}>📄</Text>
+                  <TouchableOpacity onPress={() => Linking.openURL(project.agreement.startsWith('http') ? project.agreement : `${API_URL.replace('/api', '')}${project.agreement}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.greenGlow, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.green + '40' }}>
+                    <Ionicons name="document" size={26} color={C.green} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: C.green, fontSize: 14, fontWeight: '700' }}>Signed Agreement</Text>
                       <Text style={{ color: C.text2, fontSize: 11 }}>Tap to download / view</Text>
@@ -547,14 +547,38 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
                   </TouchableOpacity>
                 )}
                 {project.quotation && (
-                  <TouchableOpacity onPress={() => Linking.openURL(`${API_URL}${project.quotation}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.purpleGlow, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.purple + '40' }}>
-                    <Text style={{ fontSize: 26 }}>📋</Text>
+                  <TouchableOpacity onPress={() => Linking.openURL(project.quotation.startsWith('http') ? project.quotation : `${API_URL.replace('/api', '')}${project.quotation}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.purpleGlow, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.purple + '40' }}>
+                    <Ionicons name="clipboard" size={26} color={C.purple} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: C.purple, fontSize: 14, fontWeight: '700' }}>Quotation</Text>
                       <Text style={{ color: C.text2, fontSize: 11 }}>Tap to download / view</Text>
                     </View>
                     <View style={{ backgroundColor: C.purple + '30', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}>
                       <Text style={{ color: C.purple, fontSize: 10, fontWeight: '700' }}>VIEW</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+                {project.inst_photo_1 && (
+                  <TouchableOpacity onPress={() => Linking.openURL(project.inst_photo_1.startsWith('http') ? project.inst_photo_1 : `${API_URL.replace('/api', '')}${project.inst_photo_1}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.gold + '15', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.gold + '40' }}>
+                    <Ionicons name="camera" size={26} color={C.gold} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: C.gold, fontSize: 14, fontWeight: '700' }}>Inst. Photo 1</Text>
+                      <Text style={{ color: C.text2, fontSize: 11 }}>Tap to download / view</Text>
+                    </View>
+                    <View style={{ backgroundColor: C.gold + '30', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}>
+                      <Text style={{ color: C.gold, fontSize: 10, fontWeight: '700' }}>VIEW</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+                {project.inst_photo_2 && (
+                  <TouchableOpacity onPress={() => Linking.openURL(project.inst_photo_2.startsWith('http') ? project.inst_photo_2 : `${API_URL.replace('/api', '')}${project.inst_photo_2}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.gold + '15', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.gold + '40' }}>
+                    <Ionicons name="camera" size={26} color={C.gold} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: C.gold, fontSize: 14, fontWeight: '700' }}>Inst. Photo 2</Text>
+                      <Text style={{ color: C.text2, fontSize: 11 }}>Tap to download / view</Text>
+                    </View>
+                    <View style={{ backgroundColor: C.gold + '30', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}>
+                      <Text style={{ color: C.gold, fontSize: 10, fontWeight: '700' }}>VIEW</Text>
                     </View>
                   </TouchableOpacity>
                 )}
