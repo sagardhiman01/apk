@@ -314,7 +314,7 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
             <div className="px-5 pb-3 mt-4">
               <p className="text-xs font-bold tracking-widest uppercase mb-3" style={{color:'#F0A500'}}>📁 Uploaded Files</p>
               
-              {!(project.site_photo || project.agreement || project.quotation) && (
+              {!(project.site_photo || project.agreement || project.quotation || project.inst_photo_1 || project.inst_photo_2) && (
                 <p className="text-xs text-slate-500 mb-4 italic">No documents uploaded yet.</p>
               )}
 
@@ -328,6 +328,12 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
                 {project.quotation && (
                   <DownloadBtn url={`https://hon-cooperation-assist-firewire.trycloudflare.com${project.quotation}`} name="quotation" label="📋 Quotation" />
                 )}
+                {project.inst_photo_1 && (
+                  <DownloadBtn url={`https://hon-cooperation-assist-firewire.trycloudflare.com${project.inst_photo_1}`} name="inst_photo_1" label="📷 Inst. Photo 1" />
+                )}
+                {project.inst_photo_2 && (
+                  <DownloadBtn url={`https://hon-cooperation-assist-firewire.trycloudflare.com${project.inst_photo_2}`} name="inst_photo_2" label="📷 Inst. Photo 2" />
+                )}
               </div>
 
               <div className="bg-red-50 border border-red-200 rounded-xl p-3">
@@ -338,6 +344,8 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
                     <option value="site_photo">Site Photo</option>
                     <option value="agreement">Agreement</option>
                     <option value="quotation">Quotation</option>
+                    <option value="inst_photo_1">Inst. Photo 1</option>
+                    <option value="inst_photo_2">Inst. Photo 2</option>
                   </select>
                   <input type="text" placeholder="Reason..." value={rejectReason} onChange={e => setRejectReason(e.target.value)} className="flex-1 text-xs border border-red-200 rounded-lg px-2 py-1.5 bg-white outline-none" />
                   <button onClick={handleReject} disabled={busy || !rejectDoc || !rejectReason} className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">
