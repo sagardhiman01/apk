@@ -334,6 +334,38 @@ app.put('/api/projects/:id', async (req, res) => {
   }
 });
 
+// Update Project Documents Endpoint
+app.put('/api/projects/:id/document', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    if (Object.keys(updates).length === 0) return res.json({success: true});
+
+    const [existing] = await getPool().query('SELECT id FROM projects WHERE id = ?', [id]);
+    if (existing.length === 0) return res.status(404).json({ error: 'Project not found' });
+
+    const setClauses = [];
+    const values = [];
+    
+    const allowed = ['site_photo', 'agreement', 'quotation', 'inst_photo_1', 'inst_photo_2', 'failed_document', 'rejection_reason'];
+    for (const key of Object.keys(updates)) {
+      if (allowed.includes(key)) {
+        setClauses.push(`${key} = ?`);
+        values.push(updates[key]);
+      }
+    }
+
+    if (setClauses.length > 0) {
+      values.push(id);
+      await getPool().query(`UPDATE projects SET ${setClauses.join(', ')} WHERE id = ?`, values);
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating document:', error.message);
+    res.status(500).json({ error: 'Unable to update document' });
+  }
+});
+
 // Loan Approve Endpoint (Admin only)
 app.put('/api/projects/:id/loan-approve', async (req, res) => {
   try {
