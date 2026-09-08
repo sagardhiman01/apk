@@ -9,7 +9,19 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
+const getApiUrl = () => {
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
+    const host = window.location.hostname || 'localhost';
+    const envUrl = process.env.EXPO_PUBLIC_API_URL;
+    if (!envUrl || envUrl.includes('localhost') || envUrl.includes('127.0.0.1') || envUrl.includes('hostingersite')) {
+      return `http://${host}:5000/api`;
+    }
+    return envUrl;
+  }
+  return process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
+};
+
+const API_URL = getApiUrl();
 const { width: W, height: H } = Dimensions.get('window');
 
 const C = {
@@ -349,15 +361,16 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
   };
 
   const STEPS = [
-    { id: 1, icon: 'document-text', label: 'Registration', desc: 'Files login, quotation, and agreement' },
-    { id: 2, icon: 'clipboard', label: 'UPCL Approval', desc: 'UPCL documents verified' },
-    { id: 3, icon: 'create', label: 'Loan Apply', desc: 'Applied on UPCL portal' },
-    { id: 4, icon: 'cash', label: '1st Disbursed', desc: 'First loan amount disbursed' },
-    { id: 5, icon: 'cube', label: 'Material Disp.', desc: 'Materials dispatched to site' },
-    { id: 6, icon: 'flash', label: 'Installation', desc: 'Install, collect serials, geotag' },
-    { id: 7, icon: 'cash', label: '2nd Disbursed', desc: 'Second loan amount disbursed' },
-    { id: 8, icon: 'cloud-upload', label: 'Upload Inst.', desc: 'Upload installation with DCR' },
-    { id: 9, icon: 'gift', label: 'Subsidy Redeem', desc: 'Subsidy claimed and redeemed' },
+    { id: 1, icon: 'document-text', label: 'Registration', desc: 'Files login and details fill' },
+    { id: 2, icon: 'create', label: 'Quotation + Sign', desc: 'Quotation + upload sign document' },
+    { id: 3, icon: 'document-attach', label: 'Agreement', desc: 'Upload agreement + quotation' },
+    { id: 4, icon: 'briefcase', label: 'Loan Apply', desc: 'Loan apply submitted' },
+    { id: 5, icon: 'cash', label: 'Loan Disbursed', desc: 'If not disbursed tag with remark' },
+    { id: 6, icon: 'cube', label: 'Material Dispatch', desc: 'Materials dispatched to site' },
+    { id: 7, icon: 'flash', label: 'Installation', desc: 'Panel & Inverter # with Geotag' },
+    { id: 8, icon: 'cash', label: 'Second Disbursed', desc: 'Second loan amount disbursed' },
+    { id: 9, icon: 'cloud-upload', label: 'Upload Inst.', desc: 'Upload installation with DCR' },
+    { id: 10, icon: 'gift', label: 'Subsidy Redeem', desc: 'Subsidy claimed and redeemed' },
   ];
 
   // Show UPCL waiting screen if loan is in process but not fully approved/installed, and we want to show a loading screen.
@@ -386,13 +399,13 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
             <View style={{ backgroundColor: C.card, borderRadius: 20, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: C.border }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 }}>
                 <Text style={{ color: C.text2, fontSize: 11, fontWeight: '700', letterSpacing: 1.5 }}>PROGRESS</Text>
-                <Text style={{ color: C.gold, fontWeight: '800' }}>{Math.round(((currentStep - 1) / 4) * 100)}%</Text>
+                <Text style={{ color: C.gold, fontWeight: '800' }}>{Math.round(((currentStep - 1) / 10) * 100)}%</Text>
               </View>
               <View style={{ height: 6, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden' }}>
-                <View style={{ height: '100%', width: `${((currentStep - 1) / 4) * 100}%` as any, backgroundColor: C.gold, borderRadius: 3 }} />
+                <View style={{ height: '100%', width: `${((currentStep - 1) / 10) * 100}%` as any, backgroundColor: C.gold, borderRadius: 3 }} />
               </View>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
-                {STEPS.map(s => (
+                {STEPS.filter(s => s.id % 2 !== 0).map(s => (
                   <View key={s.id} style={{ alignItems: 'center', gap: 4 }}>
                     <View style={{ width: 28, height: 28, borderRadius: 9, backgroundColor: currentStep >= s.id ? C.gold + '30' : C.border, borderWidth: 1.5, borderColor: currentStep >= s.id ? C.gold : C.borderHi, alignItems: 'center', justifyContent: 'center' }}>
                       <Text style={{ fontSize: currentStep >= s.id ? 14 : 10, color: currentStep >= s.id ? C.gold : C.text3 }}>{currentStep >= s.id ? '✓' : s.id}</Text>
@@ -483,7 +496,7 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
                     {isNext && busy && role === 'admin' && <SpinLoader color={C.gold} />}
                     {!done && (!isNext || role !== 'admin') && <View style={{ width: 24, height: 24, borderRadius: 8, backgroundColor: C.border }} />}
                   </TouchableOpacity>
-                  {s.id === 8 && (
+                  {s.id === 10 && (
                     <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, paddingHorizontal: 4 }}>
                       <TouchableOpacity onPress={() => uploadStep8Photo('inst_photo_1')} style={{ flex: 1, height: 50, borderRadius: 12, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: project.inst_photo_1 ? C.gold : C.borderHi, borderStyle: project.inst_photo_1 ? 'solid' : 'dashed' }}>
                         {project.inst_photo_1 ? <Text style={{ color: C.gold, fontSize: 12, fontWeight: '600' }}>✓ Photo 1</Text> : <Ionicons name="add" size={20} color={C.text2} />}
@@ -839,9 +852,9 @@ function ProjectCard({ project, onPress, index }: { project: any; onPress: () =>
     Animated.spring(anim, { toValue: 1, tension: 55, friction: 11, delay: index * 65, useNativeDriver: true }).start();
   }, []);
 
-  const pct = (((project.step || 1) - 1) / 8) * 100;
-  const stepColors = [C.text3, C.blue, C.purple, C.gold, C.orange, C.green, C.gold, C.blue, C.teal, C.green];
-  const col = stepColors[Math.min(project.step || 1, 9)];
+  const pct = (((project.step || 1) - 1) / 10) * 100;
+  const stepColors = [C.text3, C.blue, C.purple, C.gold, C.orange, C.green, C.gold, C.blue, C.teal, C.green, C.orange, C.purple];
+  const col = stepColors[Math.min(project.step || 1, 11)];
 
   return (
     <Animated.View style={{ opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [28, 0] }) }, { scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) }] }}>
@@ -954,8 +967,8 @@ function DashboardScreen({ role, onLogout }: { role: string; onLogout: () => voi
   const stats = [
     { label: 'Total', val: projects.length, color: C.blue },
     { label: 'Pending', val: projects.filter(p => !p.step || p.step < 2).length, color: C.gold },
-    { label: 'Active', val: projects.filter(p => (p.step || 1) >= 2 && (p.step || 1) < 5).length, color: C.purple },
-    { label: 'Done', val: projects.filter(p => (p.step || 1) >= 5).length, color: C.green },
+    { label: 'Active', val: projects.filter(p => (p.step || 1) >= 2 && (p.step || 1) < 10).length, color: C.purple },
+    { label: 'Done', val: projects.filter(p => (p.step || 1) >= 10).length, color: C.green },
   ];
 
   const roleColor = role === 'admin' ? C.gold : C.green;

@@ -92,6 +92,7 @@ async function initializeDatabase(dbPool) {
         pan_number VARCHAR(50),
         meter_number VARCHAR(50),
         loan_approved BOOLEAN DEFAULT FALSE,
+        bank_remarks TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -106,12 +107,26 @@ async function initializeDatabase(dbPool) {
       await dbPool.query('ALTER TABLE projects ADD COLUMN site_location VARCHAR(500) AFTER site_photo');
     } catch(e) { /* column already exists, ignore */ }
 
+    // Add bank_remarks column if old DB doesn't have it
+    try {
+      await dbPool.query('ALTER TABLE projects ADD COLUMN bank_remarks TEXT AFTER loan_approved');
+    } catch(e) { /* column already exists, ignore */ }
+
     // Create reminders table
     await dbPool.query(`
       CREATE TABLE IF NOT EXISTS reminders (
         id INT AUTO_INCREMENT PRIMARY KEY,
         project_id INT,
         message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create access_codes table for passwordless login
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS access_codes (
+        code VARCHAR(8) PRIMARY KEY,
+        role VARCHAR(50) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -207,18 +222,66 @@ function generateClientId() {
 
 // ─── Auth & Project APIs ─────────────────────────────────────────────────────────────
 
-app.post('/api/auth/admin-login', authLimiter, (req, res) => {
-  const { password } = req.body;
-  const adminPassword = process.env.ADMIN_PASSWORD ? process.env.ADMIN_PASSWORD.trim() : null;
-  
-  if (!adminPassword) {
-    return res.status(500).json({ success: false, error: 'Server misconfiguration: ADMIN_PASSWORD not set' });
-  }
+app.post('/api/auth/admin-login', authLimiter, async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
-  if (password === adminPassword) {
-    res.json({ success: true, token: 'fake-admin-token-123' });
-  } else {
-    res.status(401).json({ success: false, error: 'Incorrect password. Please try again.' });
+    const [users] = await getPool().query('SELECT * FROM users WHERE email = ?', [email]);
+    if (users.length === 0) {
+      return res.status(401).json({ success: false, error: 'Invalid credentials' });
+    }
+
+    const user = users[0];
+    const isMatch = await bcrypt.compare(password, user.password);
+    
+    if (isMatch) {
+      res.json({ 
+        success: true, 
+        token: 'fake-admin-token-123', // Keeping simple for now, but real app should use JWT
+        user: { id: user.id, email: user.email, role: user.role } 
+      });
+    } else {
+      res.status(401).json({ success: false, error: 'Incorrect password. Please try again.' });
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ success: false, error: 'Login failed' });
+  }
+});
+
+// ─── User Management (Admin Only ideally) ──────────────────────────────────
+app.get('/api/users', async (req, res) => {
+  try {
+    const [rows] = await getPool().query('SELECT id, email, role, created_at FROM users ORDER BY created_at DESC');
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+app.post('/api/users', async (req, res) => {
+  try {
+    const { email, password, role } = req.body;
+    if (!email || !password || !role) return res.status(400).json({ error: 'Missing fields' });
+    
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const [result] = await getPool().query(
+      'INSERT INTO users (email, password, role) VALUES (?, ?, ?)',
+      [email.toLowerCase(), hashedPassword, role]
+    );
+    res.json({ success: true, id: result.insertId });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create user (might already exist)' });
+  }
+});
+
+app.delete('/api/users/:id', async (req, res) => {
+  try {
+    await getPool().query('DELETE FROM users WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete user' });
   }
 });
 
@@ -230,11 +293,27 @@ app.get('/api/projects', async (req, res) => {
     let query = 'SELECT * FROM projects WHERE 1=1';
     let params = [];
 
-    // TENANT ISOLATION: filter by user_id so each account sees only their own projects
+    // TENANT ISOLATION (For normal clients)
     if (user_id) {
       query += ' AND user_id = ?';
       params.push(parseInt(user_id));
     }
+    
+    const role = req.query.role;
+    // ROLE-BASED FILTERING (For Department Queues)
+    if (role && role !== 'admin') {
+       if (role === 'bo_registration') { query += ' AND step = 1'; }
+       else if (role === 'bo_upcl') { query += ' AND step = 2'; }
+       else if (role === 'bo_quotation') { query += ' AND step = 3'; }
+       else if (role === 'bo_agreement') { query += ' AND step = 4'; }
+       else if (role === 'bo_loan') { query += ' AND step = 5'; }
+       else if (role === 'bank') { query += ' AND step IN (6, 9)'; } // Bank handles 1st and 2nd disbursed
+       else if (role === 'store') { query += ' AND step = 7'; }
+       else if (role === 'installation') { query += ' AND step = 8'; }
+       else if (role === 'bo_upload_inst') { query += ' AND step = 10'; }
+       else if (role === 'bo_subsidy') { query += ' AND step = 11'; }
+    }
+
     if (search) {
       query += ' AND (client_id LIKE ? OR customer_name LIKE ? OR phone LIKE ?)';
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
@@ -296,15 +375,22 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
 app.put('/api/projects/:id/step', async (req, res) => {
   try {
     const { id } = req.params;
-    const step = parseInt(req.body.step);
-    const status = sanitize(req.body.status);
-    const failed_document = req.body.failed_document || null;
-    const rejection_reason = req.body.rejection_reason || null;
+    const { step, status, failed_document, rejection_reason, bank_remarks } = req.body;
+    
+    if (step < 1 || step > 12) return res.status(400).json({ error: 'Invalid step' });
 
-    if (isNaN(step) || step < 1 || step > 5) return res.status(400).json({ error: 'Invalid step value (must be 1-5)' });
-    if (!status) return res.status(400).json({ error: 'Status is required' });
+    let q = 'UPDATE projects SET step=?, status=?, failed_document=?, rejection_reason=?';
+    let params = [step, status || `Step ${step}`, failed_document || null, rejection_reason || null];
 
-    await getPool().query('UPDATE projects SET step = ?, status = ?, failed_document = ?, rejection_reason = ? WHERE id = ?', [step, status, failed_document, rejection_reason, id]);
+    if (bank_remarks !== undefined) {
+      q += ', bank_remarks=?';
+      params.push(bank_remarks);
+    }
+
+    q += ' WHERE id=?';
+    params.push(id);
+
+    await getPool().query(q, params);
     res.json({ success: true });
   } catch (error) {
     console.error('Error updating project:', error.message);
@@ -545,6 +631,66 @@ app.delete('/api/reminders/:id', async (req, res) => {
   } catch (error) {
     console.error('Error deleting reminder:', error.message);
     res.status(500).json({ error: 'Unable to delete reminder' });
+  }
+});
+
+// --- Access Codes API ---
+app.post('/api/access-codes', async (req, res) => {
+  try {
+    const role = sanitize(req.body.role);
+    if (!role) return res.status(400).json({ error: 'Role is required' });
+    
+    // Generate an 8-character random alphanumeric code
+    const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+    
+    await getPool().query('INSERT INTO access_codes (code, role) VALUES (?, ?)', [code, role]);
+    res.json({ success: true, code, role });
+  } catch (error) {
+    console.error('Error generating access code:', error.message);
+    res.status(500).json({ error: 'Unable to generate access code' });
+  }
+});
+
+app.get('/api/access-codes', async (req, res) => {
+  try {
+    const [codes] = await getPool().query('SELECT code, role, created_at FROM access_codes ORDER BY created_at DESC');
+    res.json(codes);
+  } catch (error) {
+    console.error('Error fetching access codes:', error.message);
+    res.status(500).json({ error: 'Unable to fetch access codes' });
+  }
+});
+
+app.delete('/api/access-codes/:code', async (req, res) => {
+  try {
+    const { code } = req.params;
+    const [result] = await getPool().query('DELETE FROM access_codes WHERE code = ?', [code]);
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Code not found' });
+    res.json({ success: true, message: 'Code deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting access code:', error.message);
+    res.status(500).json({ error: 'Unable to delete access code' });
+  }
+});
+
+app.post('/api/auth/login-code', authLimiter, async (req, res) => {
+  try {
+    const code = sanitize(req.body.code).toUpperCase();
+    if (!code) return res.status(400).json({ success: false, message: 'Code is required' });
+
+    const [rows] = await getPool().query('SELECT role FROM access_codes WHERE code = ?', [code]);
+    if (rows.length === 0) {
+      return res.status(401).json({ success: false, message: 'Invalid or revoked access code' });
+    }
+
+    const role = rows[0].role;
+    res.json({
+      success: true,
+      user: { email: `user_${code.toLowerCase()}@ramsun.local`, role: role, is_code: true }
+    });
+  } catch (error) {
+    console.error('Code login error:', error.message);
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
 

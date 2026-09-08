@@ -18,3 +18,4 @@ ramsun-mobile/.env
 .DS_Store
 Thumbs.db
 *.log
+Captures/

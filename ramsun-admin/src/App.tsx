@@ -1,7 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, NavLink, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, NavLink, Link, useLocation, Navigate } from 'react-router-dom';
 
-const API = import.meta.env.VITE_API_URL || '/api';
+const getAdminApi = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  if (typeof window !== 'undefined' && window.location) {
+    const host = window.location.hostname || 'localhost';
+    return `http://${host}:5000/api`;
+  }
+  return 'http://localhost:5000/api';
+};
+
+const API = getAdminApi();
+
 
 
 /* ─── Blob Download Helper ────────────────────────────────────────────────── */
@@ -103,6 +113,36 @@ const Icons = {
       <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
     </svg>
   ),
+  Key: () => (
+    <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+      <path d="M21 2l-2 2m-1.5 1.5L16 7l-1.5-1.5L13 7l-1-1-1.5 1.5A7 7 0 102 14a7 7 0 0010.5-6.06L21 2z"/>
+    </svg>
+  ),
+  FileText: () => (
+    <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <line x1="16" y1="13" x2="8" y2="13"/>
+      <line x1="16" y1="17" x2="8" y2="17"/>
+      <polyline points="10 9 9 9 8 9"/>
+    </svg>
+  ),
+  Upload: () => (
+    <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+      <polyline points="17 8 12 3 7 8"/>
+      <line x1="12" y1="3" x2="12" y2="15"/>
+    </svg>
+  ),
+  Gift: () => (
+    <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+      <polyline points="20 12 20 22 4 22 4 12"/>
+      <rect x="2" y="7" width="20" height="5"/>
+      <line x1="12" y1="22" x2="12" y2="7"/>
+      <path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/>
+      <path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/>
+    </svg>
+  ),
 };
 
 /* ─── Status Badge ─────────────────────────────────────────────────────────── */
@@ -146,13 +186,47 @@ function StatCard({ label, value, sub, gradient, icon }: {
   );
 }
 
+/* ─── Department Role and Path Permissions (Only BO Paths) ─────────────────── */
+const PATH_ALLOWED_STEPS: Record<string, number[]> = {
+  '/registration': [1],
+  '/quotation':    [2],
+  '/agreement':    [3],
+  '/loan':         [4],
+  '/upload-inst':  [9],
+  '/subsidy':      [10],
+};
+
+const ROLE_ALLOWED_STEPS: Record<string, number[]> = {
+  bo_registration: [1],
+  bo_quotation:    [2],
+  bo_agreement:    [3],
+  bo_loan:         [4],
+  bo_upload_inst:  [9],
+  bo_subsidy:      [10],
+};
+
+function getAllowedSteps(pathname: string, user?: any): number[] {
+  // If user has a department role (not admin), their role strictly defines what they can mark:
+  if (user && user.role && user.role !== 'admin') {
+    return ROLE_ALLOWED_STEPS[user.role] || [];
+  }
+  // If user is on a specific BO department path, only that department's step(s) can be marked:
+  if (PATH_ALLOWED_STEPS[pathname]) {
+    return PATH_ALLOWED_STEPS[pathname];
+  }
+  // Master overview (/ or /projects) for Admin: all steps allowed
+  return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+}
+
 /* ─── Project Edit Modal ───────────────────────────────────────────────────── */
-function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant, onDelete }: {
+function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant, onDelete, currentUser, currentPath }: {
   project: any; onClose: () => void;
-  onUpdate: (id: number, step: number, status: string, failed_doc?: string | null, reason?: string | null) => Promise<void>;
+  onUpdate: (id: number, step: number, status: string, failed_doc?: string | null, reason?: string | null, bank_remarks?: string | null) => Promise<void>;
   onLoanApprove: (id: number) => Promise<void>;
   onSaveApplicant: (id: number, data: any) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
+  currentUser?: any;
+  currentPath?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<'steps' | 'edit'>('steps');
@@ -167,25 +241,46 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
     meter_number: project.meter_number || '',
   });
   const steps = [
-    { id: 1, status: 'Registration',    icon: '📄', desc: 'Files login, quotation, and agreement' },
-    { id: 2, status: 'UPCL Approval',   icon: '📋', desc: 'Upload and verify UPCL documents' },
-    { id: 3, status: 'Loan Apply',      icon: '📝', desc: 'Apply for loan on UPCL portal' },
-    { id: 4, status: '1st Disbursed',   icon: '🏦', desc: 'First loan amount disbursed' },
-    { id: 5, status: 'Material Disp.',  icon: '🚚', desc: 'Materials dispatched to site' },
-    { id: 6, status: 'Installation',    icon: '⚡', desc: 'Install, collect serials, geotag' },
-    { id: 7, status: '2nd Disbursed',   icon: '💸', desc: 'Second loan amount disbursed' },
-    { id: 8, status: 'Upload Inst.',    icon: '📤', desc: 'Upload installation with DCR' },
-    { id: 9, status: 'Subsidy Redeem',  icon: '🎁', desc: 'Subsidy claimed and redeemed' },
+    { id: 1, status: 'Registration',          icon: '📄', desc: 'Files login & details fill (UPCL if transfer)', role: 'bo_registration', dept: 'Registration' },
+    { id: 2, status: 'Quotation + Sign',      icon: '✍️', desc: 'Quotation + upload sign document', role: 'bo_quotation', dept: 'Quotation' },
+    { id: 3, status: 'Agreement',             icon: '🤝', desc: 'Upload agreement + quotation', role: 'bo_agreement', dept: 'Agreement' },
+    { id: 4, status: 'Loan Apply',            icon: '📝', desc: 'Loan apply submitted', role: 'bo_loan', dept: 'Loan Apply' },
+    { id: 5, status: 'Loan Disbursed',        icon: '🏦', desc: 'Loan disbursed (or tag with remark)', role: 'bank', dept: 'Bank' },
+    { id: 6, status: 'Material Dispatch',     icon: '🚚', desc: 'Materials dispatched to site', role: 'store', dept: 'Store' },
+    { id: 7, status: 'Complete Installation', icon: '⚡', desc: 'Panel & Inverter # with Geotag photo', role: 'installation', dept: 'Installation' },
+    { id: 8, status: 'Second Disbursed',      icon: '💸', desc: 'Second loan amount disbursed', role: 'bank', dept: 'Bank' },
+    { id: 9, status: 'Upload Inst. (DCR)',    icon: '📤', desc: 'Upload installation with DCR', role: 'bo_upload_inst', dept: 'Upload Inst.' },
+    { id: 10, status: 'Subsidy Redeem',       icon: '🎁', desc: 'Subsidy claimed and redeemed', role: 'bo_subsidy', dept: 'Subsidy' },
   ];
   const cur = project.step ?? 1;
-  const pct = Math.round(((cur - 1) / 8) * 100);
+  const pct = Math.min(100, Math.round(((Math.max(1, cur) - 1) / 10) * 100));
+  const allowedSteps = getAllowedSteps(currentPath || '', currentUser);
 
   const [rejectDoc, setRejectDoc] = useState('');
   const [rejectReason, setRejectReason] = useState('');
 
-  const handle = async (id: number, status: string) => {
+  const handle = async (s: any) => {
+    if (!allowedSteps.includes(s.id)) {
+      alert(`Access Restricted: Step "${s.status}" can only be marked by the ${s.dept} department.`);
+      return;
+    }
+    if (cur !== s.id) {
+      alert(`Cannot mark Step ${s.id}: Please complete step ${cur} first.`);
+      return;
+    }
+
+    let remarks = null;
+    if (s.id === 5) {
+      remarks = window.prompt("Enter Bank Remarks (tag with remark if not disbursed):");
+      if (remarks === null) return; // User cancelled
+    }
+    
+    const nextStep = s.id + 1;
+    const nextObj = steps.find(x => x.id === nextStep);
+    const nextStatus = nextObj ? nextObj.status : 'Completed';
+
     setBusy(true);
-    await onUpdate(project.id, id, status, null, null);
+    await onUpdate(project.id, nextStep, nextStatus, null, null, remarks);
     setBusy(false);
   };
 
@@ -220,7 +315,7 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
             <div className="flex gap-1.5 flex-shrink-0">
               <button onClick={() => setMode(mode === 'steps' ? 'edit' : 'steps')} className="text-slate-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-xl px-2.5 py-2 transition-colors text-xs font-bold flex items-center gap-1 whitespace-nowrap">
                 <span>{mode === 'steps' ? '✏️' : '📋'}</span>
-                <span className="hidden sm:inline">{mode === 'steps' ? 'Edit Info' : 'Steps'}</span>
+                <span>{mode === 'steps' ? 'Edit Info' : 'Steps'}</span>
               </button>
               <button onClick={onClose} className="text-slate-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-xl p-2 transition-colors flex-shrink-0">
                 <Icons.X />
@@ -243,23 +338,27 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
 
           {/* Step dots */}
           <div className="flex justify-between mt-4">
-            {steps.map(s => (
-              <div key={s.id} className="flex flex-col items-center gap-1">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-sm border-2 transition-all relative overflow-hidden ${
-                  cur >= s.id
-                    ? 'bg-yellow-400 border-yellow-300 text-slate-900 shadow-[0_0_10px_rgba(250,204,21,0.6)]'
-                    : cur + 1 === s.id
-                    ? 'bg-yellow-100 border-yellow-400 text-yellow-600 shadow-[0_0_15px_rgba(250,204,21,0.8)]'
-                    : 'bg-white/10 border-white/20 text-white/40'
-                }`}>
-                  {(cur + 1 === s.id) && (
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-yellow-200 to-transparent opacity-50 animate-[shimmer_1.5s_infinite]" style={{ transform: 'skewX(-20deg)' }}></div>
-                  )}
-                  {cur >= s.id ? '✓' : (cur + 1 === s.id ? <span className="animate-spin text-lg">↻</span> : s.id)}
+            {steps.map(s => {
+              const isDone = cur > s.id;
+              const isCurrent = cur === s.id;
+              return (
+                <div key={s.id} className="flex flex-col items-center gap-1">
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-sm border-2 transition-all relative overflow-hidden ${
+                    isDone
+                      ? 'bg-yellow-400 border-yellow-300 text-slate-900 shadow-[0_0_10px_rgba(250,204,21,0.6)]'
+                      : isCurrent
+                      ? 'bg-yellow-100 border-yellow-400 text-yellow-600 shadow-[0_0_15px_rgba(250,204,21,0.8)]'
+                      : 'bg-white/10 border-white/20 text-white/40'
+                  }`}>
+                    {isCurrent && (
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-yellow-200 to-transparent opacity-50 animate-[shimmer_1.5s_infinite]" style={{ transform: 'skewX(-20deg)' }}></div>
+                    )}
+                    {isDone ? '✓' : (isCurrent ? <span className="animate-spin text-lg">↻</span> : s.id)}
+                  </div>
+                  <span className="text-[9px] text-slate-500 hidden sm:block">{s.status.split(' ')[0]}</span>
                 </div>
-                <span className="text-[9px] text-slate-500 hidden sm:block">{s.status.split(' ')[0]}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -269,43 +368,92 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
           <>
             {/* Steps list */}
             <div className="p-4 sm:p-5 space-y-2.5">
-              <p className="text-xs font-bold text-slate-400 tracking-widest uppercase mb-3">Workflow Steps</p>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-bold text-slate-400 tracking-widest uppercase">Workflow Steps</p>
+                {currentPath && PATH_ALLOWED_STEPS[currentPath] && (
+                  <span className="text-[11px] font-extrabold px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 border border-amber-200">
+                    Active Dept: {steps.find(x => allowedSteps.includes(x.id))?.dept || 'Restricted'}
+                  </span>
+                )}
+              </div>
               {steps.map(s => {
-                const done = cur >= s.id;
-                const next = cur + 1 === s.id;
+                const isDone = cur > s.id;
+                const isCurrent = cur === s.id;
+                const isUpcoming = cur < s.id;
+                const isRoleAllowed = allowedSteps.includes(s.id);
+
                 return (
-                  <button
+                  <div
                     key={s.id}
-                    disabled={done || busy}
-                    onClick={() => handle(s.id, s.status)}
                     className={`relative overflow-hidden w-full flex items-center gap-3.5 px-4 py-3 rounded-xl border-2 text-left transition-all duration-200
-                      ${done
-                        ? 'border-yellow-200 bg-yellow-50 cursor-default shadow-[0_0_10px_rgba(250,204,21,0.2)]'
-                        : next
-                        ? 'border-yellow-400 bg-yellow-50/50 hover:shadow-lg hover:shadow-yellow-300/40 cursor-pointer shadow-[0_0_15px_rgba(250,204,21,0.4)]'
-                        : 'border-slate-100 bg-slate-50 cursor-not-allowed opacity-50'
+                      ${isDone
+                        ? 'border-emerald-200 bg-emerald-50/50 shadow-sm'
+                        : isCurrent
+                        ? (isRoleAllowed
+                            ? 'border-yellow-400 bg-yellow-50/60 shadow-[0_0_15px_rgba(250,204,21,0.35)]'
+                            : 'border-amber-200 bg-amber-50/30')
+                        : 'border-slate-100 bg-slate-50/70 opacity-60'
                       }`}
                   >
-                    {next && (
+                    {isCurrent && isRoleAllowed && (
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-yellow-200/40 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" style={{ transform: 'skewX(-20deg)' }}></div>
                     )}
-                    <div className={`flex items-center justify-center w-10 h-10 rounded-full ${done || next ? 'bg-yellow-100' : 'bg-slate-100'}`}>
-                      {next ? <span className="animate-spin text-xl text-yellow-500">↻</span> : <span className="text-xl filter drop-shadow-[0_0_5px_rgba(250,204,21,0.8)]">{s.icon}</span>}
+                    <div className={`flex items-center justify-center w-10 h-10 rounded-full shrink-0 ${
+                      isDone ? 'bg-emerald-100 text-emerald-600' : isCurrent ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-400'
+                    }`}>
+                      {isDone ? (
+                        <span className="text-emerald-600 font-black text-lg">✓</span>
+                      ) : isCurrent ? (
+                        <span className="animate-spin text-xl text-yellow-500">↻</span>
+                      ) : (
+                        <span className="text-xl filter grayscale opacity-70">{s.icon}</span>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0 z-10">
-                      <p className={`text-sm font-bold ${done ? 'text-yellow-700' : next ? 'text-yellow-600 animate-pulse' : 'text-slate-500'}`}>
-                        Step {s.id}: {s.status}
-                      </p>
-                      <p className="text-xs text-slate-400 truncate">{s.desc}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className={`text-sm font-bold ${isDone ? 'text-emerald-800' : isCurrent ? 'text-yellow-700 font-extrabold' : 'text-slate-500'}`}>
+                          Step {s.id}: {s.status}
+                        </p>
+                        {isDone && (
+                          <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md">✓ Completed</span>
+                        )}
+                        {isCurrent && !isRoleAllowed && (
+                          <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md">
+                            🔒 {s.dept} Dept Only
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400 truncate mt-0.5">{s.desc}</p>
                     </div>
-                    {done && <span className="text-yellow-500 text-lg font-bold">✓</span>}
-                    {next && !busy && (
-                      <span className="bg-gradient-to-r from-yellow-300 to-yellow-500 text-slate-900 text-xs font-bold px-3 py-1 rounded-lg z-10 shadow-md">Mark ✓</span>
-                    )}
-                    {next && busy && (
-                      <span className="animate-spin text-yellow-500 z-10">↻</span>
-                    )}
-                  </button>
+
+                    {/* Action Button / Badge */}
+                    <div className="shrink-0 z-10">
+                      {isDone && (
+                        <span className="text-emerald-600 text-xs font-black px-2.5 py-1">
+                          Done ✓
+                        </span>
+                      )}
+                      {isCurrent && isRoleAllowed && (
+                        <button
+                          disabled={busy}
+                          onClick={() => handle(s)}
+                          className="bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-500 hover:to-amber-600 text-slate-950 text-xs font-black px-4 py-2 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                        >
+                          {busy ? <span className="animate-spin">↻</span> : <span>Mark ✓</span>}
+                        </button>
+                      )}
+                      {isCurrent && !isRoleAllowed && (
+                        <span className="text-[11px] text-slate-400 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 font-bold flex items-center gap-1">
+                          🔒 Locked
+                        </span>
+                      )}
+                      {isUpcoming && (
+                        <span className="text-xs text-slate-400 font-medium">
+                          Pending
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
             </div>
@@ -359,6 +507,16 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
                 )}
               </div>
             </div>
+
+            {/* Bank Remarks Section */}
+            {project.bank_remarks && (
+              <div className="px-5 pb-3">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
+                  <p className="text-xs font-bold text-yellow-700 mb-1">🏦 Bank Remarks (1st Disbursed)</p>
+                  <p className="text-sm text-yellow-900">{project.bank_remarks}</p>
+                </div>
+              </div>
+            )}
 
             {/* Loan Approve Button */}
             {!project.loan_approved && (
@@ -437,7 +595,7 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
         </div>{/* end scrollable */}
 
         {/* Footer - always visible */}
-        <div className="px-4 sm:px-5 py-4 flex justify-between border-t border-slate-100 flex-shrink-0 bg-white">
+        <div className="px-4 sm:px-5 py-4 flex justify-between border-t border-slate-100 flex-shrink-0 bg-white rounded-b-3xl">
           <button 
             disabled={busy}
             onClick={async () => {
@@ -448,9 +606,9 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
                 onClose();
               }
             }} 
-            className="bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-sm px-6 py-2.5 rounded-xl transition-colors"
+            className="bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-sm px-4 sm:px-6 py-2.5 rounded-xl transition-colors"
           >
-            Delete Project
+            🗑️ Delete
           </button>
           <button onClick={onClose} className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-sm px-6 py-2.5 rounded-xl transition-colors">
             Close
@@ -462,7 +620,7 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
 }
 
 /* ─── Dashboard ────────────────────────────────────────────────────────────── */
-function Dashboard() {
+function Dashboard({ user }: { user?: any }) {
   const loc = useLocation();
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -479,6 +637,7 @@ function Dashboard() {
       const q = new URLSearchParams();
       if (search) q.append('search', search);
       if (filter) q.append('status', filter);
+      if (user && user.role) q.append('role', user.role);
 
       const r = await fetch(`${API}/projects?${q.toString()}`);
       if (!r.ok) throw new Error();
@@ -489,11 +648,11 @@ function Dashboard() {
 
   useEffect(() => { load(); }, [load]);
 
-  const updateProject = async (id: number, step: number, status: string, failed_document?: string | null, rejection_reason?: string | null) => {
+  const updateProject = async (id: number, step: number, status: string, failed_document?: string | null, rejection_reason?: string | null, bank_remarks?: string | null) => {
     try {
       await fetch(`${API}/projects/${id}/step`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step, status, failed_document, rejection_reason }),
+        body: JSON.stringify({ step, status, failed_document, rejection_reason, bank_remarks }),
       });
       await load();
       setSelected(null);
@@ -538,14 +697,25 @@ function Dashboard() {
   };
 
   const displayProjects = projects.filter(p => {
-    if (loc.pathname === '/loans') return [3, 4, 7].includes(p.step);
-    if (loc.pathname === '/installations') return [5, 6, 8].includes(p.step);
-    return true; // '/projects' or '/'
+    const curStep = p.step ?? 1;
+    switch (loc.pathname) {
+      case '/registration': return curStep === 1;
+      case '/quotation':    return curStep === 2;
+      case '/agreement':    return curStep === 3;
+      case '/loan':         return curStep === 4;
+      case '/upload-inst':  return curStep === 9;
+      case '/subsidy':      return curStep === 10;
+      default: return true; // '/projects' or '/'
+    }
   });
 
-  const done = displayProjects.filter(p => (p.step ?? 0) >= 9).length;
-  const pending = displayProjects.filter(p => !p.step || p.step < 1).length;
-  const inProcess = displayProjects.filter(p => (p.step ?? 0) > 0 && (p.step ?? 0) < 9).length;
+  const pageInfo = Object.values(ROLE_PAGES).find(p => p.to === loc.pathname);
+  const pageTitle = pageInfo ? `${pageInfo.label} Department` : 'Overview';
+  const pageDesc = pageInfo ? `Manage and process projects in ${pageInfo.label} queue` : 'Ramsun Solar · Project Management Dashboard';
+
+  const done = displayProjects.filter(p => (p.step ?? 0) >= 10).length;
+  const pending = displayProjects.filter(p => !p.step || p.step <= 1).length;
+  const inProcess = displayProjects.filter(p => (p.step ?? 0) > 1 && (p.step ?? 0) < 10).length;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-full">
@@ -560,10 +730,19 @@ function Dashboard() {
       {/* Page header */}
       <div className="flex flex-col sm:flex-row gap-4 justify-between items-start mb-6 md:mb-8">
         <div>
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-800 tracking-tight">Overview</h1>
-          <p className="text-slate-400 mt-1 text-sm">Ramsun Solar · Project Management Dashboard</p>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-800 tracking-tight">{pageTitle}</h1>
+          <p className="text-slate-400 mt-1 text-sm">{pageDesc}</p>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+          {(!user || user.role === 'admin') && loc.pathname === '/' && (
+            <Link
+              to="/users"
+              className="px-4 py-2.5 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-500 hover:to-amber-600 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-md flex items-center justify-center gap-2 transition-all whitespace-nowrap"
+            >
+              <span>🔑</span>
+              <span>Generate Access Code</span>
+            </Link>
+          )}
           <input
             type="text"
             placeholder="Search ID, Name, Phone..."
@@ -578,15 +757,16 @@ function Dashboard() {
             className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 w-full sm:w-auto"
           >
             <option value="">All Statuses</option>
-            <option value="Registration">Registration</option>
-            <option value="UPCL Approval">UPCL Approval</option>
-            <option value="Loan Apply">Loan Apply</option>
-            <option value="1st Disbursed">1st Disbursed</option>
-            <option value="Material Disp.">Material Disp.</option>
-            <option value="Installation">Installation</option>
-            <option value="2nd Disbursed">2nd Disbursed</option>
-            <option value="Upload Inst.">Upload Inst.</option>
-            <option value="Subsidy Redeem">Subsidy Redeem</option>
+            <option value="Registration">Registration (BO)</option>
+            <option value="Quotation + Sign">Quotation + Sign (BO)</option>
+            <option value="Agreement">Agreement (BO)</option>
+            <option value="Loan Apply">Loan Apply (BO)</option>
+            <option value="Loan Disbursed">Loan Disbursed (Bank)</option>
+            <option value="Material Dispatch">Material Dispatch (Store)</option>
+            <option value="Complete Installation">Complete Installation</option>
+            <option value="Second Disbursed">Second Disbursed (Bank)</option>
+            <option value="Upload Inst. (DCR)">Upload Inst. (DCR) (BO)</option>
+            <option value="Subsidy Redeem">Subsidy Redeem (BO)</option>
           </select>
           <button
             onClick={load}
@@ -599,7 +779,7 @@ function Dashboard() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 md:mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
         <StatCard label="Total Projects"    value={displayProjects.length} sub="+8%" gradient="bg-gradient-to-br from-blue-500 to-indigo-700"   icon={<Icons.Briefcase />} />
         <StatCard label="Pending Approval"  value={pending}         sub="+3"  gradient="bg-gradient-to-br from-orange-400 to-rose-600"   icon={<Icons.Zap />} />
         <StatCard label="In Progress"       value={inProcess}       sub="→"   gradient="bg-gradient-to-br from-violet-500 to-purple-700" icon={<Icons.CreditCard />} />
@@ -697,9 +877,9 @@ function Dashboard() {
                         <div className="flex items-center gap-2">
                           <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                             <div className="h-full bg-gradient-to-r from-yellow-400 to-emerald-500 rounded-full transition-all duration-700"
-                              style={{ width: `${((p.step ?? 0) / 4) * 100}%` }} />
+                              style={{ width: `${((p.step ?? 0) / 11) * 100}%` }} />
                           </div>
-                          <span className="text-xs text-slate-400 font-medium w-7 shrink-0">{p.step ?? 0}/4</span>
+                          <span className="text-xs text-slate-400 font-medium w-8 shrink-0">{p.step ?? 0}/11</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -733,6 +913,8 @@ function Dashboard() {
           onLoanApprove={loanApprove}
           onSaveApplicant={saveApplicant}
           onDelete={del}
+          currentUser={user}
+          currentPath={loc.pathname}
         />
       )}
     </div>
@@ -768,51 +950,219 @@ function DownloadBtn({ url, name, label }: { url: string; name: string; label: s
 }
 
 /* ─── Users Page ──────────────────────────────────────────────────────────── */
+/* ─── Users & Access Codes Page ──────────────────────────────────────────────────────────── */
 function UsersPage() {
   const [users, setUsers] = useState<any[]>([]);
+  const [codes, setCodes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  useEffect(() => {
+  const [loadingCodes, setLoadingCodes] = useState(true);
+  const [selectedRole, setSelectedRole] = useState('bo_registration');
+  const [generating, setGenerating] = useState(false);
+
+  const fetchUsers = () => {
     fetch(`${API}/auth/users`)
       .then(r => r.json())
       .then(d => { setUsers(Array.isArray(d) ? d : []); setLoading(false); })
       .catch(() => setLoading(false));
+  };
+
+  const fetchCodes = () => {
+    fetch(`${API}/access-codes`)
+      .then(r => r.json())
+      .then(d => { setCodes(Array.isArray(d) ? d : []); setLoadingCodes(false); })
+      .catch(() => setLoadingCodes(false));
+  };
+
+  useEffect(() => {
+    fetchUsers();
+    fetchCodes();
   }, []);
+
+  const [codeToRevoke, setCodeToRevoke] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState(false);
+
+  const handleGenerate = async () => {
+    if (!selectedRole) return;
+    setGenerating(true);
+    try {
+      const res = await fetch(`${API}/access-codes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: selectedRole })
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && d.success) {
+        fetchCodes();
+      } else {
+        alert(d.error || 'Failed to generate code');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Failed to generate code. Please check connection.');
+    }
+    setGenerating(false);
+  };
+
+  const confirmRevoke = async () => {
+    if (!codeToRevoke) return;
+    setRevoking(true);
+    try {
+      const res = await fetch(`${API}/access-codes/${codeToRevoke}`, { method: 'DELETE' });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && d.success) {
+        setCodeToRevoke(null);
+        fetchCodes();
+      } else {
+        alert(d.error || 'Failed to revoke code');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Failed to delete code. Please check connection.');
+    } finally {
+      setRevoking(false);
+    }
+  };
+
   return (
-    <div className="p-4 sm:p-6 md:p-8" style={{animation:'slideUp .3s ease'}}>
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-black text-slate-800">Users & Access</h1>
-        <p className="text-slate-500 text-sm mt-1">All registered app users and their roles</p>
-      </div>
-      {loading ? (
-        <div className="flex items-center justify-center py-24">
-          <svg className="animate-spin text-yellow-500" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" opacity=".25"/><path d="M21 12a9 9 0 00-9-9"/></svg>
-        </div>
-      ) : users.length === 0 ? (
-        <div className="text-center py-24 text-slate-400">No users registered yet.</div>
-      ) : (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead><tr className="bg-slate-50 border-b border-slate-100">
-              <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">#</th>
-              <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Email</th>
-              <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Role</th>
-              <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Joined</th>
-            </tr></thead>
-            <tbody>
-              {users.map((u, i) => (
-                <tr key={u.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                  <td className="px-5 py-3 text-slate-400 font-mono text-xs">{i + 1}</td>
-                  <td className="px-5 py-3 font-semibold text-slate-700">{u.email}</td>
-                  <td className="px-5 py-3">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${u.role === 'admin' ? 'bg-yellow-100 text-yellow-700' : 'bg-sky-100 text-sky-700'}`}>{u.role || 'employee'}</span>
-                  </td>
-                  <td className="px-5 py-3 text-slate-400 text-xs">{u.created_at ? new Date(u.created_at).toLocaleDateString('en-IN') : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <div className="p-4 sm:p-6 md:p-8 space-y-10" style={{animation:'slideUp .3s ease'}}>
+
+      {/* Confirmation Modal */}
+      {codeToRevoke && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-100 text-center space-y-4" style={{animation:'slideUp .2s ease'}}>
+            <div className="w-12 h-12 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto text-2xl">
+              🗑️
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-slate-900">Revoke Access Code</h3>
+              <p className="text-sm text-slate-500 mt-1">
+                Are you sure you want to revoke code <span className="font-mono font-bold text-slate-900 bg-yellow-100 px-2 py-0.5 rounded">{codeToRevoke}</span>?
+              </p>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setCodeToRevoke(null)}
+                disabled={revoking}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmRevoke}
+                disabled={revoking}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-sm rounded-xl transition-colors shadow-md shadow-red-200 flex items-center justify-center gap-2"
+              >
+                {revoking ? 'Revoking...' : 'Yes, Revoke'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
+      
+      {/* Access Codes Section */}
+      <section>
+        <div className="mb-6 flex flex-col sm:flex-row justify-between sm:items-end gap-4">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-black text-slate-800">Access Codes (Passwordless)</h1>
+            <p className="text-slate-500 text-sm mt-1">Generate 8-digit codes for employees to log in without passwords</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedRole}
+              onChange={e => setSelectedRole(e.target.value)}
+              className="bg-white border border-slate-200 text-slate-700 text-sm rounded-xl px-3 py-2 outline-none focus:border-yellow-500"
+            >
+              {Object.entries(ROLE_PAGES).map(([role, page]) => (
+                <option key={role} value={role}>{page.label} ({role})</option>
+              ))}
+            </select>
+            <button
+              onClick={handleGenerate}
+              disabled={generating}
+              className="bg-slate-900 text-yellow-400 font-bold text-sm px-4 py-2 rounded-xl shadow-sm hover:bg-slate-800 transition-colors whitespace-nowrap"
+            >
+              {generating ? 'Generating...' : '+ Generate Code'}
+            </button>
+          </div>
+        </div>
+
+        {loadingCodes ? (
+          <div className="flex items-center justify-center py-12">
+            <svg className="animate-spin text-yellow-500" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" opacity=".25"/><path d="M21 12a9 9 0 00-9-9"/></svg>
+          </div>
+        ) : codes.length === 0 ? (
+          <div className="text-center py-12 text-slate-400 bg-white rounded-2xl border border-slate-100">No access codes active. Generate one above.</div>
+        ) : (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead><tr className="bg-slate-50 border-b border-slate-100">
+                <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Access Code</th>
+                <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Role</th>
+                <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Created At</th>
+                <th className="text-right px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Actions</th>
+              </tr></thead>
+              <tbody>
+                {codes.map(c => (
+                  <tr key={c.code} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                    <td className="px-5 py-3 font-mono text-slate-800 font-black tracking-widest bg-yellow-50/50">{c.code}</td>
+                    <td className="px-5 py-3">
+                      <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-sky-100 text-sky-700">{c.role}</span>
+                    </td>
+                    <td className="px-5 py-3 text-slate-400 text-xs">{new Date(c.created_at).toLocaleString('en-IN')}</td>
+                    <td className="px-5 py-3 text-right">
+                      <button
+                        onClick={() => setCodeToRevoke(c.code)}
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50 px-2.5 py-1 rounded transition-colors text-xs font-bold"
+                      >
+                        Revoke
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* Legacy Users Section */}
+      <section>
+        <div className="mb-6">
+          <h2 className="text-lg font-black text-slate-800">Registered Accounts</h2>
+          <p className="text-slate-500 text-xs mt-1">Legacy email/password accounts</p>
+        </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <svg className="animate-spin text-yellow-500" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" opacity=".25"/><path d="M21 12a9 9 0 00-9-9"/></svg>
+          </div>
+        ) : users.length === 0 ? (
+          <div className="text-center py-12 text-slate-400 bg-white rounded-2xl border border-slate-100">No users registered.</div>
+        ) : (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead><tr className="bg-slate-50 border-b border-slate-100">
+                <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">#</th>
+                <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Email</th>
+                <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Role</th>
+                <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Joined</th>
+              </tr></thead>
+              <tbody>
+                {users.map((u, i) => (
+                  <tr key={u.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                    <td className="px-5 py-3 text-slate-400 font-mono text-xs">{i + 1}</td>
+                    <td className="px-5 py-3 font-semibold text-slate-700">{u.email}</td>
+                    <td className="px-5 py-3">
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${u.role === 'admin' ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-700'}`}>{u.role || 'employee'}</span>
+                    </td>
+                    <td className="px-5 py-3 text-slate-400 text-xs">{u.created_at ? new Date(u.created_at).toLocaleDateString('en-IN') : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+      
     </div>
   );
 }
@@ -933,28 +1283,51 @@ function ComingSoon({ title, icon }: { title: string; icon: React.ReactNode }) {
 }
 
 /* ─── Login Page ──────────────────────────────────────────────────────────── */
-function LoginPage({ onLogin }: { onLogin: () => void }) {
+function LoginPage({ onLogin }: { onLogin: (user: any) => void }) {
+  const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
+  const [accessCode, setAccessCode] = useState('');
+  const [isCodeLogin, setIsCodeLogin] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [show, setShow] = useState(false);
+
   const handle = async () => {
-    if (!pw.trim()) return;
-    setLoading(true); setError('');
-    try {
-      const res = await fetch(`${API}/auth/admin-login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw })
-      });
-      const data = await res.json();
-      if (data.success) { onLogin(); }
-      else { setError(data.error || 'Incorrect password. Please try again.'); }
-    } catch {
-      setError('Cannot connect to server. Please try again.');
+    if (isCodeLogin) {
+      if (!accessCode.trim()) return;
+      setLoading(true); setError('');
+      try {
+        const res = await fetch(`${API}/auth/login-code`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: accessCode })
+        });
+        const data = await res.json();
+        if (data.success) { onLogin(data.user); }
+        else { setError(data.message || 'Invalid or revoked access code.'); }
+      } catch {
+        setError('Cannot connect to server. Please try again.');
+      }
+      setLoading(false);
+    } else {
+      if (!email.trim() || !pw.trim()) return;
+      setLoading(true); setError('');
+      try {
+        const res = await fetch(`${API}/auth/admin-login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password: pw })
+        });
+        const data = await res.json();
+        if (data.success) { onLogin(data.user); }
+        else { setError(data.error || 'Incorrect credentials. Please try again.'); }
+      } catch {
+        setError('Cannot connect to server. Please try again.');
+      }
+      setLoading(false);
     }
-    setLoading(false);
   };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950 relative overflow-hidden">
       {/* Background glow */}
@@ -971,27 +1344,63 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
         {/* Card */}
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-7 shadow-2xl">
           <h2 className="text-white font-black text-lg mb-1">Welcome back 👋</h2>
-          <p className="text-slate-500 text-sm mb-6">Enter your admin password to continue</p>
+          <p className="text-slate-500 text-sm mb-6">Login to your account to continue</p>
+          
+          <div className="flex bg-slate-800 rounded-xl p-1 mb-6">
+            <button onClick={() => {setIsCodeLogin(true); setError('');}} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${isCodeLogin ? 'bg-yellow-500 text-slate-900' : 'text-slate-400 hover:text-white'}`}>Employee Code</button>
+            <button onClick={() => {setIsCodeLogin(false); setError('');}} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${!isCodeLogin ? 'bg-yellow-500 text-slate-900' : 'text-slate-400 hover:text-white'}`}>Admin Login</button>
+          </div>
+
           {error && (
             <div className="bg-red-950 border border-red-800 text-red-400 text-sm rounded-xl px-4 py-3 mb-4 flex items-center gap-2">
               <span>⚠️</span> {error}
             </div>
           )}
-          <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Password</label>
-          <div className="relative mb-5">
-            <input
-              type={show ? 'text' : 'password'}
-              value={pw}
-              onChange={e => { setPw(e.target.value); setError(''); }}
-              onKeyDown={e => e.key === 'Enter' && handle()}
-              placeholder="Enter admin password"
-              className="w-full bg-slate-800 border border-slate-700 text-white placeholder-slate-600 rounded-xl px-4 py-3.5 text-sm outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/20 transition-all pr-11"
-            />
-            <button onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors text-xs">{show ? '🙈' : '👁️'}</button>
-          </div>
+          {isCodeLogin ? (
+            <>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Access Code</label>
+              <div className="relative mb-6">
+                <input
+                  type="text"
+                  value={accessCode}
+                  onChange={e => { setAccessCode(e.target.value.toUpperCase()); setError(''); }}
+                  onKeyDown={e => e.key === 'Enter' && handle()}
+                  placeholder="Enter 8-digit code"
+                  className="w-full bg-slate-800 border border-slate-700 text-white placeholder-slate-600 rounded-xl px-4 py-3.5 text-sm outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/20 transition-all font-mono tracking-widest"
+                  maxLength={8}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Email Address</label>
+              <div className="relative mb-4">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => { setEmail(e.target.value); setError(''); }}
+                  placeholder="Enter admin email"
+                  className="w-full bg-slate-800 border border-slate-700 text-white placeholder-slate-600 rounded-xl px-4 py-3.5 text-sm outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/20 transition-all"
+                />
+              </div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Password</label>
+              <div className="relative mb-5">
+                <input
+                  type={show ? 'text' : 'password'}
+                  value={pw}
+                  onChange={e => { setPw(e.target.value); setError(''); }}
+                  onKeyDown={e => e.key === 'Enter' && handle()}
+                  placeholder="Enter admin password"
+                  className="w-full bg-slate-800 border border-slate-700 text-white placeholder-slate-600 rounded-xl px-4 py-3.5 text-sm outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/20 transition-all pr-11"
+                />
+                <button onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors text-xs">{show ? '🙈' : '👁️'}</button>
+              </div>
+            </>
+          )}
+
           <button
             onClick={handle}
-            disabled={loading || !pw}
+            disabled={loading || (isCodeLogin ? !accessCode : !pw)}
             className="w-full py-3.5 rounded-xl font-black text-slate-900 text-sm transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 relative overflow-hidden"
             style={{background:'linear-gradient(135deg,#EAB308,#F59E0B)', boxShadow:'0 8px 30px rgba(234,179,8,0.3)'}}
           >
@@ -1010,7 +1419,7 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
 }
 
 /* ─── Mobile Header Bar ───────────────────────────────────────────────────── */
-function MobileHeader({ onMenuOpen, onLogout }: { onMenuOpen: () => void; onLogout?: () => void }) {
+function MobileHeader({ user, onMenuOpen, onLogout }: { user?: any; onMenuOpen: () => void; onLogout?: () => void }) {
   return (
     <header className="md:hidden fixed top-0 left-0 right-0 z-40 bg-slate-950 border-b border-white/5 flex items-center justify-between px-4 py-3">
       <div className="flex items-center gap-2.5">
@@ -1018,6 +1427,9 @@ function MobileHeader({ onMenuOpen, onLogout }: { onMenuOpen: () => void; onLogo
         <p className="text-base font-black text-white leading-none">Ramsun<span className="text-yellow-400">Energy</span></p>
       </div>
       <div className="flex items-center gap-2">
+        {user && user.role !== 'admin' && (
+           <span className="text-xs bg-yellow-400/20 text-yellow-400 font-bold px-2 py-1 rounded-md">{user.role}</span>
+        )}
         {onLogout && (
           <button onClick={onLogout} className="text-red-400 hover:text-red-300 text-xs font-bold px-3 py-1.5 rounded-lg border border-red-900/40 hover:bg-red-950 transition-colors">
             🚪
@@ -1037,18 +1449,44 @@ function MobileHeader({ onMenuOpen, onLogout }: { onMenuOpen: () => void; onLogo
   );
 }
 
-/* ─── Sidebar ──────────────────────────────────────────────────────────────── */
+/* ─── Sidebar (BO paths only as per flowchart) ────────────────────────────── */
 const NAV_LINKS = [
-  { to: '/', label: 'Dashboard',    icon: 'Dashboard',    end: true },
-  { to: '/projects',     label: 'Projects',     icon: 'Briefcase' },
-  { to: '/loans',        label: 'Loans',        icon: 'CreditCard' },
-  { to: '/installations',label: 'Installations',icon: 'Zap' },
-  { to: '/reminders',    label: 'Reminders',    icon: 'Bell' },
-  { to: '/users',        label: 'Users',        icon: 'Users' },
-  { to: '/settings',     label: 'Settings',     icon: 'Settings' },
+  { to: '/',             label: 'Dashboard',             icon: 'Dashboard', end: true },
+  { to: '/projects',     label: 'All Projects',          icon: 'Briefcase' },
+  { to: '/registration', label: 'Registration (BO)',     icon: 'FileText' },
+  { to: '/quotation',    label: 'Quotation + Sign (BO)', icon: 'FileText' },
+  { to: '/agreement',    label: 'Agreement (BO)',        icon: 'FileText' },
+  { to: '/loan',         label: 'Loan Apply (BO)',       icon: 'FileText' },
+  { to: '/upload-inst',  label: 'Upload Inst. (BO)',     icon: 'Upload' },
+  { to: '/subsidy',      label: 'Subsidy Redeem (BO)',   icon: 'Gift' },
+  { to: '/reminders',    label: 'Reminders',             icon: 'Bell' },
+  { to: '/users',        label: 'Access Codes',          icon: 'Key' },
+  { to: '/settings',     label: 'Settings',              icon: 'Settings' },
 ];
 
-function SidebarContent({ onLogout, onClose }: { onLogout?: () => void; onClose?: () => void }) {
+const ROLE_PAGES: Record<string, { to: string; label: string }> = {
+  bo_registration: { to: '/registration', label: 'Registration (BO)' },
+  bo_quotation:    { to: '/quotation',    label: 'Quotation + Sign (BO)' },
+  bo_agreement:    { to: '/agreement',    label: 'Agreement + Quotation (BO)' },
+  bo_loan:         { to: '/loan',         label: 'Loan Apply (BO)' },
+  bo_upload_inst:  { to: '/upload-inst',  label: 'Upload Inst. (DCR) (BO)' },
+  bo_subsidy:      { to: '/subsidy',      label: 'Subsidy Redeem (BO)' }
+};
+
+function SidebarContent({ user, onLogout, onClose }: { user?: any; onLogout?: () => void; onClose?: () => void }) {
+  
+  // Filter links based on role
+  const isAdmin = user && user.role === 'admin';
+  let links = [];
+  if (isAdmin) {
+    links = NAV_LINKS;
+  } else if (user && ROLE_PAGES[user.role]) {
+    const page = ROLE_PAGES[user.role];
+    links = [{ to: page.to, label: page.label, icon: 'Briefcase', end: true }];
+  } else {
+    links = [{ to: '/', label: 'Dashboard', icon: 'Dashboard', end: true }];
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Logo */}
@@ -1071,7 +1509,7 @@ function SidebarContent({ onLogout, onClose }: { onLogout?: () => void; onClose?
 
       {/* Nav */}
       <div className="mt-6 space-y-1.5 flex-1 px-4">
-        {NAV_LINKS.map(({ to, label, icon, end }) => {
+        {links.map(({ to, label, icon, end }) => {
           const Ic = Icons[icon as keyof typeof Icons];
           return (
             <NavLink
@@ -1096,10 +1534,12 @@ function SidebarContent({ onLogout, onClose }: { onLogout?: () => void; onClose?
       {/* User + Logout */}
       <div className="p-3 border-t border-white/5 space-y-2">
         <div className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center font-black text-slate-900 text-sm shrink-0">A</div>
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center font-black text-slate-900 text-sm shrink-0">
+            {user?.email?.charAt(0).toUpperCase() || 'U'}
+          </div>
           <div className="min-w-0">
-            <p className="text-sm font-semibold leading-none text-white">Admin User</p>
-            <p className="text-xs text-slate-500 mt-0.5 truncate">ramsun.admin</p>
+            <p className="text-sm font-semibold leading-none text-white truncate">{user?.role || 'Admin User'}</p>
+            <p className="text-xs text-slate-500 mt-0.5 truncate">{user?.email || 'admin@ramsun.com'}</p>
           </div>
         </div>
         {onLogout && (
@@ -1112,7 +1552,7 @@ function SidebarContent({ onLogout, onClose }: { onLogout?: () => void; onClose?
   );
 }
 
-function Sidebar({ onLogout, open, onClose }: { onLogout?: () => void; open?: boolean; onClose?: () => void }) {
+function Sidebar({ user, onLogout, open, onClose }: { user?: any; onLogout?: () => void; open?: boolean; onClose?: () => void }) {
   return (
     <>
       {/* Mobile Drawer Overlay */}
@@ -1127,14 +1567,14 @@ function Sidebar({ onLogout, open, onClose }: { onLogout?: () => void; open?: bo
             style={{ animation: 'slideRight .25s ease' }}
             onClick={e => e.stopPropagation()}
           >
-            <SidebarContent onLogout={onLogout} onClose={onClose} />
+            <SidebarContent user={user} onLogout={onLogout} onClose={onClose} />
           </aside>
         </div>
       )}
 
       {/* Desktop Sidebar — always visible on md+ */}
       <aside className="hidden md:flex w-48 lg:w-56 shrink-0 bg-slate-950 text-white flex-col min-h-screen sticky top-0 h-screen">
-        <SidebarContent onLogout={onLogout} />
+        <SidebarContent user={user} onLogout={onLogout} />
       </aside>
     </>
   );
@@ -1143,20 +1583,26 @@ function Sidebar({ onLogout, open, onClose }: { onLogout?: () => void; open?: bo
 
 /* ─── App ──────────────────────────────────────────────────────────────────── */
 export default function App() {
-  const [authed, setAuthed] = useState(() => sessionStorage.getItem('ramsun_admin') === '1');
+  const [user, setUser] = useState<any>(() => {
+    const saved = sessionStorage.getItem('ramsun_admin_user');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  if (!authed) return (
+  if (!user) return (
     <>
       <style>{`
         @keyframes slideUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
         @keyframes slideRight{from{opacity:0;transform:translateX(-100%)}to{opacity:1;transform:translateX(0)}}
       `}</style>
-      <LoginPage onLogin={() => { sessionStorage.setItem('ramsun_admin','1'); setAuthed(true); }} />
+      <LoginPage onLogin={(u) => { 
+        sessionStorage.setItem('ramsun_admin_user', JSON.stringify(u)); 
+        setUser(u); 
+      }} />
     </>
   );
 
-  const handleLogout = () => { sessionStorage.removeItem('ramsun_admin'); setAuthed(false); };
+  const handleLogout = () => { sessionStorage.removeItem('ramsun_admin_user'); setUser(null); };
 
   return (
     <>
@@ -1169,10 +1615,11 @@ export default function App() {
       <Router>
         <div className="flex min-h-screen bg-slate-100 font-sans">
           {/* Mobile top bar */}
-          <MobileHeader onMenuOpen={() => setSidebarOpen(true)} onLogout={handleLogout} />
+          <MobileHeader user={user} onMenuOpen={() => setSidebarOpen(true)} onLogout={handleLogout} />
 
           {/* Sidebar */}
           <Sidebar
+            user={user}
             onLogout={handleLogout}
             open={sidebarOpen}
             onClose={() => setSidebarOpen(false)}
@@ -1181,13 +1628,25 @@ export default function App() {
           {/* Main content — add top padding on mobile to clear fixed header */}
           <div className="flex-1 overflow-auto flex flex-col min-h-screen pt-14 md:pt-0">
             <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/projects"      element={<Dashboard />} />
-              <Route path="/loans"         element={<Dashboard />} />
-              <Route path="/installations" element={<Dashboard />} />
+              <Route path="/" element={
+                (user && user.role !== 'admin' && ROLE_PAGES[user.role]) 
+                  ? <Navigate to={ROLE_PAGES[user.role].to} replace /> 
+                  : <Dashboard user={user} />
+              } />
+              <Route path="/projects"      element={<Dashboard user={user} />} />
               <Route path="/reminders"     element={<RemindersPage />} />
               <Route path="/users"         element={<UsersPage />} />
               <Route path="/settings"      element={<SettingsPage />} />
+
+              {/* BO Department specific routes */}
+              <Route path="/registration"  element={<Dashboard user={user} />} />
+              <Route path="/quotation"     element={<Dashboard user={user} />} />
+              <Route path="/agreement"     element={<Dashboard user={user} />} />
+              <Route path="/loan"          element={<Dashboard user={user} />} />
+              <Route path="/upload-inst"   element={<Dashboard user={user} />} />
+              <Route path="/subsidy"       element={<Dashboard user={user} />} />
+              
+              <Route path="*"              element={<Navigate to="/" replace />} />
             </Routes>
             <footer className="mt-auto py-4 text-center text-xs text-slate-400 border-t border-slate-200">
               made by <span className="text-yellow-600 font-semibold">mac studio hub</span>
