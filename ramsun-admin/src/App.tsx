@@ -2,15 +2,24 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, NavLink, Link, useLocation, Navigate } from 'react-router-dom';
 
 const getAdminApi = () => {
-  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
   if (typeof window !== 'undefined' && window.location) {
     const host = window.location.hostname || 'localhost';
-    return `http://${host}:5000/api`;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return 'http://localhost:5000/api';
+    }
+    return '/api';
   }
-  return 'http://localhost:5000/api';
+  return '/api';
 };
 
 const API = getAdminApi();
+
+const getUploadUrl = (urlPath: string) => {
+  if (!urlPath) return '';
+  if (urlPath.startsWith('http://') || urlPath.startsWith('https://')) return urlPath;
+  const base = API.replace(/\/api\/?$/, '');
+  return `${base}${urlPath.startsWith('/') ? urlPath : '/' + urlPath}`;
+};
 
 
 
@@ -468,19 +477,19 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
 
               <div className="flex flex-wrap gap-2 mb-4">
                 {project.site_photo && (
-                  <DownloadBtn url={`https://hon-cooperation-assist-firewire.trycloudflare.com${project.site_photo}`} name="site_photo" label="📷 Site Photo" />
+                  <DownloadBtn url={getUploadUrl(project.site_photo)} name="site_photo" label="📷 Site Photo" />
                 )}
                 {project.agreement && (
-                  <DownloadBtn url={`https://hon-cooperation-assist-firewire.trycloudflare.com${project.agreement}`} name="agreement" label="📄 Agreement" />
+                  <DownloadBtn url={getUploadUrl(project.agreement)} name="agreement" label="📄 Agreement" />
                 )}
                 {project.quotation && (
-                  <DownloadBtn url={`https://hon-cooperation-assist-firewire.trycloudflare.com${project.quotation}`} name="quotation" label="📋 Quotation" />
+                  <DownloadBtn url={getUploadUrl(project.quotation)} name="quotation" label="📋 Quotation" />
                 )}
                 {project.inst_photo_1 && (
-                  <DownloadBtn url={`https://hon-cooperation-assist-firewire.trycloudflare.com${project.inst_photo_1}`} name="inst_photo_1" label="📷 Inst. Photo 1" />
+                  <DownloadBtn url={getUploadUrl(project.inst_photo_1)} name="inst_photo_1" label="📷 Inst. Photo 1" />
                 )}
                 {project.inst_photo_2 && (
-                  <DownloadBtn url={`https://hon-cooperation-assist-firewire.trycloudflare.com${project.inst_photo_2}`} name="inst_photo_2" label="📷 Inst. Photo 2" />
+                  <DownloadBtn url={getUploadUrl(project.inst_photo_2)} name="inst_photo_2" label="📷 Inst. Photo 2" />
                 )}
               </div>
 
