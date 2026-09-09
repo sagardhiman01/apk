@@ -723,19 +723,21 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
             {/* Workflow Steps */}
             <Text style={{ color: C.text2, fontSize: 11, fontWeight: '800', letterSpacing: 2, marginBottom: 12 }}>WORKFLOW</Text>
             {STEPS.map(s => {
-              const done = currentStep >= s.id;
-              const isNext = currentStep + 1 === s.id;
+              const isDone = currentStep > s.id;
+              const isCurrent = currentStep === s.id;
               return (
                 <View key={s.id} style={{ marginBottom: 12 }}>
                   <TouchableOpacity onPress={() => {
-                    if (!isNext || !canManage) return;
+                    if (!isCurrent || !canManage) return;
                     Alert.alert('Mark Complete?', `Mark "${s.label}" as done?`, [
                       { text: 'Cancel', style: 'cancel' },
                       {
                         text: 'Confirm', onPress: async () => {
                           setBusy(true);
                           try {
-                            await onUpdateStep(project.id, s.id, s.label);
+                            const nextStep = s.id + 1;
+                            const nextObj = STEPS.find(x => x.id === nextStep);
+                            await onUpdateStep(project.id, nextStep, nextObj ? nextObj.label : 'Completed');
                             if (onRefresh) await onRefresh();
                           } finally {
                             setBusy(false);
@@ -743,22 +745,22 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
                         }
                       }
                     ]);
-                  }} disabled={!isNext || busy || !canManage} activeOpacity={0.75} style={{
+                  }} disabled={!isCurrent || busy || !canManage} activeOpacity={0.75} style={{
                     flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 18,
-                    backgroundColor: done ? C.gold + '15' : isNext ? C.gold + '25' : C.card,
-                    borderWidth: 1.5, borderColor: done ? C.gold + '50' : isNext ? C.gold : C.border,
+                    backgroundColor: isDone ? C.gold + '15' : isCurrent ? C.gold + '25' : C.card,
+                    borderWidth: 1.5, borderColor: isDone ? C.gold + '50' : isCurrent ? C.gold : C.border,
                   }}>
-                    <View style={{ width: 46, height: 46, borderRadius: 14, backgroundColor: (done || isNext) ? C.gold + '25' : C.border, alignItems: 'center', justifyContent: 'center' }}>
-                      {isNext ? <SpinLoader color={C.gold} /> : <Ionicons name={s.icon as any} size={22} color={C.gold} />}
+                    <View style={{ width: 46, height: 46, borderRadius: 14, backgroundColor: (isDone || isCurrent) ? C.gold + '25' : C.border, alignItems: 'center', justifyContent: 'center' }}>
+                      {isCurrent ? <SpinLoader color={C.gold} /> : <Ionicons name={s.icon as any} size={22} color={isDone ? C.gold : C.text3} />}
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ color: (done || isNext) ? C.gold : C.text2, fontSize: 15, fontWeight: '700' }}>{s.label}</Text>
+                      <Text style={{ color: (isDone || isCurrent) ? C.gold : C.text2, fontSize: 15, fontWeight: '700' }}>{s.label}</Text>
                       <Text style={{ color: C.text2, fontSize: 12, marginTop: 2 }}>{s.desc}</Text>
                     </View>
-                    {done && <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: C.gold + '30', alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 16 }}>✓</Text></View>}
-                    {isNext && !busy && canManage && <View style={{ backgroundColor: C.gold, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 }}><Text style={{ color: '#000', fontSize: 11, fontWeight: '800' }}>Mark ✓</Text></View>}
-                    {isNext && busy && canManage && <SpinLoader color={C.gold} />}
-                    {!done && (!isNext || !canManage) && <View style={{ width: 24, height: 24, borderRadius: 8, backgroundColor: C.border }} />}
+                    {isDone && <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: C.gold + '30', alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 16 }}>✓</Text></View>}
+                    {isCurrent && !busy && canManage && <View style={{ backgroundColor: C.gold, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 }}><Text style={{ color: '#000', fontSize: 11, fontWeight: '800' }}>Mark ✓</Text></View>}
+                    {isCurrent && busy && canManage && <SpinLoader color={C.gold} />}
+                    {!isDone && !isCurrent && <View style={{ width: 24, height: 24, borderRadius: 8, backgroundColor: C.border }} />}
                   </TouchableOpacity>
 
                   {/* STEP 1: Registration actions (e.g. Send to UPCL on electricity bill issue) */}
@@ -804,76 +806,6 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
                           <Text style={{ color: C.green, fontSize: 12, fontWeight: '700' }}>✓ UPCL Resolved (Return to Normal Registration)</Text>
                         </TouchableOpacity>
                       )}
-                    </View>
-                  )}
-
-                  {/* STEP 2: Quotation + Sign Actions in APK */}
-                  {s.id === 2 && (
-                    <View style={{ backgroundColor: C.card2, borderRadius: 14, padding: 12, marginTop: 6, borderWidth: 1, borderColor: project.quotation ? C.purple + '40' : C.border }}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          <Ionicons name="clipboard" size={16} color={C.purple} />
-                          <Text style={{ color: C.text, fontSize: 12, fontWeight: '700' }}>Quotation + Sign Document</Text>
-                        </View>
-                        <View style={{ backgroundColor: project.quotation ? C.purple + '30' : C.gold + '25', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
-                          <Text style={{ color: project.quotation ? C.purple : C.gold, fontSize: 10, fontWeight: '800' }}>
-                            {project.quotation ? '✓ Attached' : '⚠️ Pending'}
-                          </Text>
-                        </View>
-                      </View>
-                      <View style={{ flexDirection: 'row', gap: 8 }}>
-                        {project.quotation && (
-                          <TouchableOpacity
-                            onPress={() => Linking.openURL(project.quotation.startsWith('http') ? project.quotation : `${API_URL.replace('/api', '')}${project.quotation}`)}
-                            style={{ flex: 1, backgroundColor: C.purple + '20', borderWidth: 1, borderColor: C.purple, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
-                          >
-                            <Text style={{ color: C.purple, fontSize: 12, fontWeight: '800' }}>👁️ View Quotation</Text>
-                          </TouchableOpacity>
-                        )}
-                        <TouchableOpacity
-                          onPress={() => uploadProjectDoc('quotation', 'Quotation')}
-                          style={{ flex: 1, backgroundColor: C.card, borderWidth: 1, borderColor: C.borderHi, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
-                        >
-                          <Text style={{ color: C.text, fontSize: 12, fontWeight: '700' }}>
-                            {project.quotation ? '🔄 Replace Quotation' : '📄 Upload Quotation (+ Sign)'}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  )}
-
-                  {/* STEP 3: Agreement Actions in APK */}
-                  {s.id === 3 && (
-                    <View style={{ backgroundColor: C.card2, borderRadius: 14, padding: 12, marginTop: 6, borderWidth: 1, borderColor: project.agreement ? C.green + '40' : C.border }}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          <Ionicons name="document-attach" size={16} color={C.green} />
-                          <Text style={{ color: C.text, fontSize: 12, fontWeight: '700' }}>Signed Solar Agreement</Text>
-                        </View>
-                        <View style={{ backgroundColor: project.agreement ? C.green + '30' : C.gold + '25', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
-                          <Text style={{ color: project.agreement ? C.green : C.gold, fontSize: 10, fontWeight: '800' }}>
-                            {project.agreement ? '✓ Attached' : '⚠️ Pending'}
-                          </Text>
-                        </View>
-                      </View>
-                      <View style={{ flexDirection: 'row', gap: 8 }}>
-                        {project.agreement && (
-                          <TouchableOpacity
-                            onPress={() => Linking.openURL(project.agreement.startsWith('http') ? project.agreement : `${API_URL.replace('/api', '')}${project.agreement}`)}
-                            style={{ flex: 1, backgroundColor: C.green + '20', borderWidth: 1, borderColor: C.green, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
-                          >
-                            <Text style={{ color: C.green, fontSize: 12, fontWeight: '800' }}>👁️ View Agreement</Text>
-                          </TouchableOpacity>
-                        )}
-                        <TouchableOpacity
-                          onPress={() => uploadProjectDoc('agreement', 'Signed Agreement')}
-                          style={{ flex: 1, backgroundColor: C.card, borderWidth: 1, borderColor: C.borderHi, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
-                        >
-                          <Text style={{ color: C.text, fontSize: 12, fontWeight: '700' }}>
-                            {project.agreement ? '🔄 Replace Agreement' : '📑 Upload Agreement'}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
                     </View>
                   )}
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, NavLink, Link, useLocation, Navigate } from 'react-router-dom';
+import { exportProjectsToExcel, downloadSingleClientZip, downloadAllProjectsZip } from './utils/exportHelpers';
 
 const getAdminApi = () => {
   if (typeof window !== 'undefined' && window.location) {
@@ -488,12 +489,13 @@ function TransferModal({ project, initialStep, currentUser, onClose, onTransferr
 }
 
 /* ─── Project Edit Modal ───────────────────────────────────────────────────── */
-function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant, onDelete, onOpenTransfer, currentUser, currentPath }: {
+function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant, onDelete, onDownloadZip, onOpenTransfer, currentUser, currentPath }: {
   project: any; onClose: () => void;
   onUpdate: (id: number, step: number, status: string, failed_doc?: string | null, reason?: string | null, bank_remarks?: string | null) => Promise<void>;
   onLoanApprove: (id: number) => Promise<void>;
   onSaveApplicant: (id: number, data: any) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
+  onDownloadZip?: (project: any) => void;
   onOpenTransfer?: (project: any, preselectStep?: number) => void;
   currentUser?: any;
   currentPath?: string;
@@ -1101,22 +1103,39 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
         </div>{/* end scrollable */}
 
         {/* Footer - always visible */}
-        <div className="px-4 sm:px-5 py-4 flex justify-between border-t border-slate-100 flex-shrink-0 bg-white rounded-b-3xl">
-          <button 
-            disabled={busy}
-            onClick={async () => {
-              if (window.confirm('Are you sure you want to delete this project? This cannot be undone.')) {
-                setBusy(true);
-                await onDelete(project.id);
-                setBusy(false);
-                onClose();
-              }
-            }} 
-            className="bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-sm px-4 sm:px-6 py-2.5 rounded-xl transition-colors"
-          >
-            🗑️ Delete
-          </button>
-          <button onClick={onClose} className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-sm px-6 py-2.5 rounded-xl transition-colors">
+        <div className="px-4 sm:px-5 py-4 flex items-center justify-between gap-2 border-t border-slate-100 flex-shrink-0 bg-white rounded-b-3xl">
+          <div className="flex items-center gap-2">
+            {onDownloadZip && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => onDownloadZip(project)}
+                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs sm:text-sm px-3.5 py-2.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                title="Download client dossier, all images and PDFs as ZIP"
+              >
+                <span>📦</span>
+                <span>Download Client ZIP</span>
+              </button>
+            )}
+            {(!currentUser || currentUser.role === 'admin') && (
+              <button 
+                disabled={busy}
+                onClick={async () => {
+                  if (window.confirm(`Are you sure you want to permanently delete Project #${project.id} (${project.customer_name || 'Client'})? This action cannot be undone.`)) {
+                    setBusy(true);
+                    await onDelete(project.id);
+                    setBusy(false);
+                    onClose();
+                  }
+                }} 
+                className="bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs sm:text-sm px-3.5 sm:px-5 py-2.5 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <span>🗑️</span>
+                <span>Delete</span>
+              </button>
+            )}
+          </div>
+          <button onClick={onClose} className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-sm px-5 py-2.5 rounded-xl transition-colors cursor-pointer">
             Close
           </button>
         </div>
@@ -1136,6 +1155,7 @@ function Dashboard({ user }: { user?: any }) {
   const [toast, setToast] = useState('');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('');
+  const [exportProgress, setExportProgress] = useState<{ percent: number; status: string } | null>(null);
   const toastTimer = useRef<any>(null);
 
   const load = useCallback(async () => {
@@ -1198,9 +1218,59 @@ function Dashboard({ user }: { user?: any }) {
 
   const del = async (id: number) => {
     try {
-      await fetch(`${API}/projects/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API}/projects/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        alert('Failed to delete project.');
+        return;
+      }
       await load();
-    } catch { /* swallowed */ }
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      setToast(`Project #${id} deleted permanently ✓`);
+      toastTimer.current = setTimeout(() => setToast(''), 3200);
+    } catch { 
+      alert('Error deleting project');
+    }
+  };
+
+  const handleExportExcel = () => {
+    if (!projects.length) {
+      alert('No projects found to export.');
+      return;
+    }
+    exportProjectsToExcel(projects);
+  };
+
+  const handleDownloadClientZip = async (project: any) => {
+    setExportProgress({ percent: 20, status: `Gathering info and files for ${project.customer_name || 'Client'}...` });
+    try {
+      await downloadSingleClientZip(project, getUploadUrl, (status: string) => {
+        setExportProgress({ percent: 90, status });
+      });
+    } catch (err: any) {
+      alert('Failed to generate client ZIP: ' + (err.message || 'Error'));
+    } finally {
+      setExportProgress(null);
+    }
+  };
+
+  const handleDownloadAllZip = async () => {
+    if (!projects.length) {
+      alert('No projects available to export.');
+      return;
+    }
+    if (!window.confirm(`Download full ZIP for all ${projects.length} projects? Each client will have their own folder with info text and files.`)) {
+      return;
+    }
+    setExportProgress({ percent: 5, status: 'Initializing ZIP packaging...' });
+    try {
+      await downloadAllProjectsZip(projects, getUploadUrl, (percent: number, status: string) => {
+        setExportProgress({ percent, status });
+      });
+    } catch (err: any) {
+      alert('Failed to generate master ZIP: ' + (err.message || 'Error'));
+    } finally {
+      setExportProgress(null);
+    }
   };
 
   const displayProjects = projects.filter(p => {
@@ -1248,14 +1318,36 @@ function Dashboard({ user }: { user?: any }) {
           <p className="text-slate-400 mt-1 text-sm">{pageDesc}</p>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-          {(!user || user.role === 'admin') && loc.pathname === '/' && (
-            <Link
-              to="/users"
-              className="px-4 py-2.5 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-500 hover:to-amber-600 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-md flex items-center justify-center gap-2 transition-all whitespace-nowrap"
-            >
-              <span>🔑</span>
-              <span>Generate Access Code</span>
-            </Link>
+          {(!user || user.role === 'admin') && (
+            <div className="flex flex-wrap items-center gap-2">
+              {loc.pathname === '/' && (
+                <Link
+                  to="/users"
+                  className="px-3.5 py-2.5 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-500 hover:to-amber-600 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all whitespace-nowrap"
+                >
+                  <span>🔑</span>
+                  <span>Access Codes</span>
+                </Link>
+              )}
+              <button
+                type="button"
+                onClick={handleExportExcel}
+                title="Download all projects in an Excel CSV file"
+                className="px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+              >
+                <span>📊</span>
+                <span>Export Excel</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadAllZip}
+                title="Download full ZIP containing a folder for each client with info, documents, and photos"
+                className="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+              >
+                <span>📦</span>
+                <span>Download All ZIP</span>
+              </button>
+            </div>
           )}
           <input
             type="text"
@@ -1334,7 +1426,29 @@ function Dashboard({ user }: { user?: any }) {
                         <p className="text-xs text-slate-400 font-mono">{p.client_id ? `#${p.client_id}` : `#${p.id}`}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadClientZip(p)}
+                        title="Download Client ZIP Dossier"
+                        className="flex items-center gap-1 text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 px-2.5 py-2 rounded-xl transition-all active:scale-95 cursor-pointer"
+                      >
+                        <span>📦</span>
+                      </button>
+                      {(!user || user.role === 'admin') && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (window.confirm(`Are you sure you want to delete Project #${p.id} (${p.customer_name || 'Client'}) permanently?`)) {
+                              await del(p.id);
+                            }
+                          }}
+                          title="Delete Project (Admin only)"
+                          className="flex items-center gap-1 text-xs font-bold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 px-2 py-2 rounded-xl transition-all active:scale-95 cursor-pointer"
+                        >
+                          <span>🗑️</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => setTransferTarget({ project: p })}
                         className="flex items-center gap-1 text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300/80 hover:bg-amber-100 px-2.5 py-2 rounded-xl transition-all active:scale-95 cursor-pointer"
@@ -1473,6 +1587,28 @@ function Dashboard({ user }: { user?: any }) {
                             <span>🔄</span>
                             <span>Transfer</span>
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadClientZip(p)}
+                            title="Download client dossier ZIP (info + all images/PDFs)"
+                            className="flex items-center gap-1 text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2.5 py-2 rounded-xl transition-all active:scale-95 whitespace-nowrap cursor-pointer shadow-sm"
+                          >
+                            <span>📦 ZIP</span>
+                          </button>
+                          {(!user || user.role === 'admin') && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (window.confirm(`Are you sure you want to permanently delete Project #${p.id} (${p.customer_name || 'Client'})? This cannot be undone.`)) {
+                                  await del(p.id);
+                                }
+                              }}
+                              title="Delete Project (Admin only)"
+                              className="flex items-center gap-1 text-xs font-bold bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-2.5 py-2 rounded-xl transition-all active:scale-95 whitespace-nowrap cursor-pointer shadow-sm"
+                            >
+                              <span>🗑️</span>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1492,6 +1628,7 @@ function Dashboard({ user }: { user?: any }) {
           onLoanApprove={loanApprove}
           onSaveApplicant={saveApplicant}
           onDelete={del}
+          onDownloadZip={handleDownloadClientZip}
           onOpenTransfer={(proj, step) => setTransferTarget({ project: proj, initialStep: step })}
           currentUser={user}
           currentPath={loc.pathname}
@@ -1513,6 +1650,39 @@ function Dashboard({ user }: { user?: any }) {
             toastTimer.current = setTimeout(() => setToast(''), 3500);
           }}
         />
+      )}
+
+      {/* Export / ZIP Progress Overlay */}
+      {exportProgress && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100 flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-2xl mb-4">
+              📦
+            </div>
+            <h3 className="text-lg font-black text-slate-800 mb-1">Generating Download</h3>
+            <p className="text-xs sm:text-sm text-slate-500 mb-4">{exportProgress.status}</p>
+            
+            {exportProgress.percent > 0 && (
+              <div className="w-full mb-3">
+                <div className="flex justify-between text-xs text-slate-400 font-bold mb-1">
+                  <span>Progress</span>
+                  <span>{exportProgress.percent}%</span>
+                </div>
+                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-indigo-500 to-emerald-500 transition-all duration-300"
+                    style={{ width: `${exportProgress.percent}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 text-xs text-slate-400 font-medium mt-2">
+              <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+              <span>Please wait while files are packaged...</span>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

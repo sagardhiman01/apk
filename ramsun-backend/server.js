@@ -613,6 +613,16 @@ app.put('/api/projects/:id/loan-approve', async (req, res) => {
 app.delete('/api/projects/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    try {
+      await getPool().query('DELETE FROM project_transfers WHERE project_id = ?', [id]);
+    } catch (e) {
+      console.warn('Could not clean transfers:', e.message);
+    }
+    try {
+      await getPool().query('DELETE FROM reminders WHERE project_id = ?', [id]);
+    } catch (e) {
+      console.warn('Could not clean reminders:', e.message);
+    }
     const [result] = await getPool().query('DELETE FROM projects WHERE id = ?', [id]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Project not found' });
     res.json({ success: true, message: 'Project deleted successfully' });
