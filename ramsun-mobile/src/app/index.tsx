@@ -12,13 +12,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const getApiUrl = () => {
   if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
     const host = window.location.hostname || 'localhost';
-    const envUrl = process.env.EXPO_PUBLIC_API_URL;
-    if (!envUrl || envUrl.includes('localhost') || envUrl.includes('127.0.0.1') || envUrl.includes('hostingersite')) {
-      return `http://${host}:5000/api`;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return 'http://localhost:5000/api';
     }
-    return envUrl;
+    return `${window.location.origin}/api`;
   }
-  return process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
+  return process.env.EXPO_PUBLIC_API_URL || 'https://ramsunenergy.online/api';
 };
 
 const API_URL = getApiUrl();
