@@ -152,6 +152,14 @@ const Icons = {
       <path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/>
     </svg>
   ),
+  Truck: () => (
+    <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+      <rect x="1" y="3" width="15" height="13" rx="1" />
+      <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+      <circle cx="5.5" cy="18.5" r="2.5" />
+      <circle cx="18.5" cy="18.5" r="2.5" />
+    </svg>
+  ),
 };
 
 /* ─── Status Badge ─────────────────────────────────────────────────────────── */
@@ -195,21 +203,31 @@ function StatCard({ label, value, sub, gradient, icon }: {
   );
 }
 
-/* ─── Department Role and Path Permissions (Only BO Paths) ─────────────────── */
+/* ─── Workflow Step Access Configuration ───────────────────────────────────── */
 const PATH_ALLOWED_STEPS: Record<string, number[]> = {
+  '/upcl':         [1],
   '/registration': [1],
   '/quotation':    [2],
   '/agreement':    [3],
   '/loan':         [4],
+  '/bank':         [5],
+  '/loan-disbursed': [5],
+  '/dispatch':     [6],
+  '/store':        [6],
+  '/installation': [7],
   '/upload-inst':  [9],
   '/subsidy':      [10],
 };
 
 const ROLE_ALLOWED_STEPS: Record<string, number[]> = {
+  upcl:            [1],
   bo_registration: [1],
   bo_quotation:    [2],
   bo_agreement:    [3],
   bo_loan:         [4],
+  bank:            [5, 8],
+  store:           [6],
+  installation:    [7],
   bo_upload_inst:  [9],
   bo_subsidy:      [10],
 };
@@ -708,10 +726,16 @@ function Dashboard({ user }: { user?: any }) {
   const displayProjects = projects.filter(p => {
     const curStep = p.step ?? 1;
     switch (loc.pathname) {
+      case '/upcl':         return curStep === 1;
       case '/registration': return curStep === 1;
       case '/quotation':    return curStep === 2;
       case '/agreement':    return curStep === 3;
       case '/loan':         return curStep === 4;
+      case '/bank':
+      case '/loan-disbursed': return curStep === 5;
+      case '/dispatch':
+      case '/store':        return curStep === 6;
+      case '/installation': return curStep === 7;
       case '/upload-inst':  return curStep === 9;
       case '/subsidy':      return curStep === 10;
       default: return true; // '/projects' or '/'
@@ -1458,26 +1482,34 @@ function MobileHeader({ user, onMenuOpen, onLogout }: { user?: any; onMenuOpen: 
   );
 }
 
-/* ─── Sidebar (BO paths only as per flowchart) ────────────────────────────── */
+/* ─── Sidebar (All flowchart paths except Second Disbursed) ─────────────── */
 const NAV_LINKS = [
-  { to: '/',             label: 'Dashboard',             icon: 'Dashboard', end: true },
-  { to: '/projects',     label: 'All Projects',          icon: 'Briefcase' },
-  { to: '/registration', label: 'Registration (BO)',     icon: 'FileText' },
-  { to: '/quotation',    label: 'Quotation + Sign (BO)', icon: 'FileText' },
-  { to: '/agreement',    label: 'Agreement (BO)',        icon: 'FileText' },
-  { to: '/loan',         label: 'Loan Apply (BO)',       icon: 'FileText' },
-  { to: '/upload-inst',  label: 'Upload Inst. (BO)',     icon: 'Upload' },
-  { to: '/subsidy',      label: 'Subsidy Redeem (BO)',   icon: 'Gift' },
-  { to: '/reminders',    label: 'Reminders',             icon: 'Bell' },
-  { to: '/users',        label: 'Access Codes',          icon: 'Key' },
-  { to: '/settings',     label: 'Settings',              icon: 'Settings' },
+  { to: '/',             label: 'Dashboard',                 icon: 'Dashboard', end: true },
+  { to: '/projects',     label: 'All Projects',              icon: 'Briefcase' },
+  { to: '/upcl',         label: 'UPCL (Transfer)',           icon: 'FileText' },
+  { to: '/registration', label: 'Registration (BO)',         icon: 'FileText' },
+  { to: '/quotation',    label: 'Quotation + Sign (BO)',     icon: 'FileText' },
+  { to: '/agreement',    label: 'Agreement (BO)',            icon: 'FileText' },
+  { to: '/loan',         label: 'Loan Apply (BO)',           icon: 'FileText' },
+  { to: '/bank',         label: 'Loan Disbursed (Bank)',     icon: 'CreditCard' },
+  { to: '/dispatch',     label: 'Material Dispatch (Store)', icon: 'Truck' },
+  { to: '/installation', label: 'Complete Installation',     icon: 'Zap' },
+  { to: '/upload-inst',  label: 'Upload Inst. (BO)',         icon: 'Upload' },
+  { to: '/subsidy',      label: 'Subsidy Redeem (BO)',       icon: 'Gift' },
+  { to: '/reminders',    label: 'Reminders',                 icon: 'Bell' },
+  { to: '/users',        label: 'Access Codes',              icon: 'Key' },
+  { to: '/settings',     label: 'Settings',                  icon: 'Settings' },
 ];
 
 const ROLE_PAGES: Record<string, { to: string; label: string }> = {
+  upcl:            { to: '/upcl',         label: 'UPCL (Transfer)' },
   bo_registration: { to: '/registration', label: 'Registration (BO)' },
   bo_quotation:    { to: '/quotation',    label: 'Quotation + Sign (BO)' },
   bo_agreement:    { to: '/agreement',    label: 'Agreement + Quotation (BO)' },
   bo_loan:         { to: '/loan',         label: 'Loan Apply (BO)' },
+  bank:            { to: '/bank',         label: 'Loan Disbursed (Bank)' },
+  store:           { to: '/dispatch',     label: 'Material Dispatch (Store)' },
+  installation:    { to: '/installation', label: 'Complete Installation' },
   bo_upload_inst:  { to: '/upload-inst',  label: 'Upload Inst. (DCR) (BO)' },
   bo_subsidy:      { to: '/subsidy',      label: 'Subsidy Redeem (BO)' }
 };
@@ -1647,11 +1679,17 @@ export default function App() {
               <Route path="/users"         element={<UsersPage />} />
               <Route path="/settings"      element={<SettingsPage />} />
 
-              {/* BO Department specific routes */}
+              {/* Department specific routes (Step 8 Second Disbursed excluded as per client) */}
+              <Route path="/upcl"          element={<Dashboard user={user} />} />
               <Route path="/registration"  element={<Dashboard user={user} />} />
               <Route path="/quotation"     element={<Dashboard user={user} />} />
               <Route path="/agreement"     element={<Dashboard user={user} />} />
               <Route path="/loan"          element={<Dashboard user={user} />} />
+              <Route path="/bank"          element={<Dashboard user={user} />} />
+              <Route path="/loan-disbursed" element={<Dashboard user={user} />} />
+              <Route path="/dispatch"      element={<Dashboard user={user} />} />
+              <Route path="/store"         element={<Dashboard user={user} />} />
+              <Route path="/installation"  element={<Dashboard user={user} />} />
               <Route path="/upload-inst"   element={<Dashboard user={user} />} />
               <Route path="/subsidy"       element={<Dashboard user={user} />} />
               
