@@ -258,6 +258,20 @@ function getAllowedSteps(pathname: string, user?: any): number[] {
   return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 }
 
+const TRANSFER_DESTINATIONS = [
+  { key: 'step_1_reg', id: 1, is_upcl: false, status: 'Registration', desc: 'Files login & details review', dept: 'Registration (BO)' },
+  { key: 'step_1_upcl', id: 1, is_upcl: true, status: 'UPCL Verification', desc: 'Electricity Bill / Name / Meter Issue', dept: 'UPCL Department' },
+  { key: 'step_2', id: 2, is_upcl: false, status: 'Quotation + Sign', desc: 'Quotation + upload sign document', dept: 'Quotation (BO)' },
+  { key: 'step_3', id: 3, is_upcl: false, status: 'Agreement', desc: 'Upload agreement + quotation', dept: 'Agreement (BO)' },
+  { key: 'step_4', id: 4, is_upcl: false, status: 'Loan Apply', desc: 'Loan apply submitted', dept: 'Loan Apply (BO)' },
+  { key: 'step_5', id: 5, is_upcl: false, status: 'Loan Disbursed', desc: 'Loan disbursed (or tag with remark)', dept: 'Bank (1st Disbursed)' },
+  { key: 'step_6', id: 6, is_upcl: false, status: 'Material Dispatch', desc: 'Materials dispatched to site', dept: 'Store / Dispatch' },
+  { key: 'step_7', id: 7, is_upcl: false, status: 'Complete Installation', desc: 'Panel & Inverter # with Geotag photo', dept: 'Installation' },
+  { key: 'step_8', id: 8, is_upcl: false, status: 'Second Disbursed', desc: 'Second loan amount disbursed', dept: 'Bank (2nd Disbursed)' },
+  { key: 'step_9', id: 9, is_upcl: false, status: 'Upload Inst. (DCR)', desc: 'Upload installation with DCR', dept: 'Upload Inst. (BO)' },
+  { key: 'step_10', id: 10, is_upcl: false, status: 'Subsidy Redeem', desc: 'Subsidy claimed and redeemed', dept: 'Subsidy Redeem (BO)' },
+];
+
 /* ─── Project Transfer Modal (Worker to Worker / Step 1 to 10) ─────────────── */
 function TransferModal({ project, initialStep, currentUser, onClose, onTransferred }: {
   project: any;
@@ -267,14 +281,17 @@ function TransferModal({ project, initialStep, currentUser, onClose, onTransferr
   onTransferred: (message: string) => void;
 }) {
   const cur = project.step ?? 1;
-  const [targetStep, setTargetStep] = useState<number>(initialStep || (cur === 1 ? 2 : 1));
+  const initialDestKey = initialStep ? (initialStep === 1 && project.status?.includes('UPCL') ? 'step_1_upcl' : `step_${initialStep}`) : (cur === 1 ? 'step_2' : 'step_1_reg');
+  const [selectedKey, setSelectedKey] = useState<string>(
+    TRANSFER_DESTINATIONS.find(d => d.key === initialDestKey || d.id === initialStep)?.key || 'step_2'
+  );
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [showHistory, setShowHistory] = useState(false);
 
   const currentStepObj = WORKFLOW_STEPS.find(s => s.id === cur);
-  const targetStepObj = WORKFLOW_STEPS.find(s => s.id === targetStep);
+  const targetDest = TRANSFER_DESTINATIONS.find(d => d.key === selectedKey) || TRANSFER_DESTINATIONS[0];
 
   useEffect(() => {
     fetch(`${API}/projects/${project.id}/transfers`)
@@ -295,8 +312,9 @@ function TransferModal({ project, initialStep, currentUser, onClose, onTransferr
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          to_step: targetStep,
-          status: targetStepObj?.status || `Step ${targetStep}`,
+          to_step: targetDest.id,
+          status: targetDest.status,
+          is_upcl: targetDest.is_upcl,
           reason: reason.trim(),
           transferred_by: currentUser?.role || currentUser?.email || 'Worker'
         })
@@ -305,7 +323,7 @@ function TransferModal({ project, initialStep, currentUser, onClose, onTransferr
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Transfer failed');
       }
-      onTransferred(`Project #${project.id} transferred to Step ${targetStep}: "${targetStepObj?.status}" ✓`);
+      onTransferred(`Project #${project.id} transferred to "${targetDest.status}" (${targetDest.dept}) ✓`);
     } catch (e: any) {
       alert(e.message || 'Transfer failed. Please check connection.');
     } finally {
@@ -339,7 +357,7 @@ function TransferModal({ project, initialStep, currentUser, onClose, onTransferr
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-slate-500">Current Step:</span>
             <span className="font-extrabold px-2 py-0.5 rounded-md bg-amber-200 text-amber-950">
-              Step {cur}: {currentStepObj?.status} ({currentStepObj?.dept})
+              Step {cur}: {currentStepObj?.status} {project.needs_upcl || project.status?.includes('UPCL') ? '(UPCL Issue)' : ''}
             </span>
           </div>
           <span className="text-[11px] text-slate-500 hidden sm:inline">
@@ -355,14 +373,14 @@ function TransferModal({ project, initialStep, currentUser, onClose, onTransferr
               Select Destination Step / Worker (1 to 10):
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {WORKFLOW_STEPS.map(s => {
-                const isSelected = targetStep === s.id;
-                const isCurrent = cur === s.id;
+              {TRANSFER_DESTINATIONS.map(s => {
+                const isSelected = selectedKey === s.key;
+                const isCurrent = cur === s.id && (s.is_upcl ? (project.needs_upcl || project.status?.includes('UPCL')) : !(project.needs_upcl || project.status?.includes('UPCL')));
                 return (
                   <button
-                    key={s.id}
+                    key={s.key}
                     type="button"
-                    onClick={() => setTargetStep(s.id)}
+                    onClick={() => setSelectedKey(s.key)}
                     className={`text-left p-3 rounded-xl border-2 transition-all flex items-center justify-between cursor-pointer ${
                       isSelected
                         ? 'border-yellow-500 bg-yellow-50/80 shadow-sm ring-2 ring-yellow-400/40'
@@ -372,15 +390,20 @@ function TransferModal({ project, initialStep, currentUser, onClose, onTransferr
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className={`text-xs font-bold ${isSelected ? 'text-slate-950' : 'text-slate-700'}`}>
-                          Step {s.id}: {s.status}
+                          {s.is_upcl ? '🏛️ UPCL' : `Step ${s.id}`}: {s.status}
                         </span>
                         {isCurrent && (
                           <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
                             Current
                           </span>
                         )}
+                        {s.is_upcl && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-800">
+                            Bill Issue
+                          </span>
+                        )}
                       </div>
-                      <p className="text-[11px] text-slate-400 truncate mt-0.5">{s.dept}</p>
+                      <p className="text-[11px] text-slate-400 truncate mt-0.5">{s.dept} · {s.desc}</p>
                     </div>
                     {isSelected && (
                       <span className="w-5 h-5 rounded-full bg-yellow-400 text-slate-950 font-black flex items-center justify-center text-xs shrink-0 ml-2">
@@ -494,6 +517,33 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
 
   const [rejectDoc, setRejectDoc] = useState('');
   const [rejectReason, setRejectReason] = useState('');
+  const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
+
+  const handleDocUpload = async (field: 'quotation' | 'agreement' | 'site_photo' | 'inst_photo_1' | 'inst_photo_2', file: File) => {
+    try {
+      setUploadingDoc(field);
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`${API}/upload`, { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Upload failed');
+      
+      const updateRes = await fetch(`${API}/projects/${project.id}/document`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: data.filePath })
+      });
+      if (!updateRes.ok) throw new Error('Failed to update project with document');
+      
+      project[field] = data.filePath;
+      alert(`${field === 'quotation' ? 'Quotation + Sign' : field === 'agreement' ? 'Signed Agreement' : field} uploaded successfully! ✓`);
+      setBusy(b => !b);
+    } catch (err: any) {
+      alert(err.message || 'Failed to upload document');
+    } finally {
+      setUploadingDoc(null);
+    }
+  };
 
   const handle = async (s: any) => {
     if (!allowedSteps.includes(s.id)) {
@@ -608,6 +658,50 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
 
         {/* Scrollable content area */}
         <div className="flex-1 overflow-y-auto">
+        {cur === 1 && (
+          <div className="mx-4 sm:mx-5 mt-4 p-3.5 bg-gradient-to-r from-sky-50 to-blue-50 border border-sky-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+            <div className="flex items-center gap-2.5">
+              <span className="text-2xl shrink-0">🏛️</span>
+              <div>
+                <p className="text-xs font-black text-sky-950">Document Problem? (Electricity Bill / Name / Meter)</p>
+                <p className="text-[11px] text-sky-700 mt-0.5">If customer's documents have discrepancies, send project to UPCL verification.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                const reason = window.prompt("Enter problem with Electricity Bill / Documents for UPCL worker:", "Electricity bill / connection name mismatch");
+                if (!reason) return;
+                try {
+                  setBusy(true);
+                  const res = await fetch(`${API}/projects/${project.id}/transfer`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      to_step: 1,
+                      status: 'UPCL Verification',
+                      is_upcl: true,
+                      reason: reason.trim(),
+                      transferred_by: currentUser?.role || currentUser?.email || 'Registration Worker'
+                    })
+                  });
+                  const data = await res.json();
+                  if (!res.ok || !data.success) throw new Error(data.error || 'Failed to send to UPCL');
+                  alert(`Project #${project.id} sent to UPCL Department! ✓`);
+                  onClose();
+                } catch (e: any) {
+                  alert(e.message || 'Failed to send to UPCL');
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              className="bg-sky-600 hover:bg-sky-700 text-white text-xs font-black px-4 py-2 rounded-xl transition-all shadow-md active:scale-95 whitespace-nowrap cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <span>🏛️</span>
+              <span>Send to UPCL Worker</span>
+            </button>
+          </div>
+        )}
         {project.transfer_remarks && (
           <div className="mx-4 sm:mx-5 mt-4 p-3.5 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-2xl flex items-start gap-3 shadow-sm">
             <span className="text-2xl shrink-0">🔄</span>
@@ -686,6 +780,20 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
                         {isDone && (
                           <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md">✓ Completed</span>
                         )}
+                        {s.id === 2 && (
+                          project.quotation ? (
+                            <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md">📋 Quotation Attached</span>
+                          ) : (
+                            <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md">⚠️ Quotation Pending</span>
+                          )
+                        )}
+                        {s.id === 3 && (
+                          project.agreement ? (
+                            <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md">📄 Agreement Attached</span>
+                          ) : (
+                            <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md">⚠️ Agreement Pending</span>
+                          )
+                        )}
                         {isCurrent && !isRoleAllowed && (
                           <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md">
                             🔒 {s.dept} Dept Only
@@ -732,9 +840,133 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
               })}
             </div>
 
-            {/* Files section */}
+            {/* Dedicated Worker Document Uploads: Quotation + Sign & Agreement */}
+            <div className="px-5 pt-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-black tracking-wider uppercase text-slate-700 flex items-center gap-1.5">
+                  <span>📄</span> Worker Documents & Signatures
+                </p>
+                <span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded-full">
+                  Step 2 & 3 Handled by Dedicated Workers
+                </span>
+              </div>
+
+              {/* Step 2: Quotation + Sign Card */}
+              <div className={`p-4 rounded-2xl border-2 transition-all ${
+                cur === 2 || currentPath === '/quotation'
+                  ? 'border-yellow-400 bg-yellow-50/70 shadow-sm'
+                  : 'border-slate-200 bg-white'
+              }`}>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center text-xl shrink-0 font-bold">
+                      📋
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-bold text-slate-900">Quotation + Sign</span>
+                        {project.quotation ? (
+                          <span className="text-[10px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md">
+                            ✓ Uploaded
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-black bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md">
+                            ⚠️ Pending Upload
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Quotation worker uploads and checks signed quotation document
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                    {project.quotation && (
+                      <DownloadBtn url={getUploadUrl(project.quotation)} name="quotation" label="👁️ View Quotation" />
+                    )}
+                    <label className={`cursor-pointer text-xs font-black px-3.5 py-2 rounded-xl transition-all shadow-sm flex items-center gap-1.5 ${
+                      uploadingDoc === 'quotation'
+                        ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                        : 'bg-yellow-400 hover:bg-yellow-500 text-slate-950 active:scale-95'
+                    }`}>
+                      <span>{uploadingDoc === 'quotation' ? '↻ Uploading...' : project.quotation ? '📤 Replace Quotation' : '📤 Upload Quotation + Sign'}</span>
+                      <input
+                        type="file"
+                        accept=".pdf,image/*"
+                        className="hidden"
+                        disabled={uploadingDoc === 'quotation'}
+                        onChange={e => {
+                          if (e.target.files && e.target.files[0]) {
+                            handleDocUpload('quotation', e.target.files[0]);
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 3: Signed Agreement Card */}
+              <div className={`p-4 rounded-2xl border-2 transition-all ${
+                cur === 3 || currentPath === '/agreement'
+                  ? 'border-emerald-400 bg-emerald-50/70 shadow-sm'
+                  : 'border-slate-200 bg-white'
+              }`}>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-xl shrink-0 font-bold">
+                      📄
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-bold text-slate-900">Signed Agreement</span>
+                        {project.agreement ? (
+                          <span className="text-[10px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md">
+                            ✓ Uploaded
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-black bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md">
+                            ⚠️ Pending Upload
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Agreement worker uploads and checks signed client agreement
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                    {project.agreement && (
+                      <DownloadBtn url={getUploadUrl(project.agreement)} name="agreement" label="👁️ View Agreement" />
+                    )}
+                    <label className={`cursor-pointer text-xs font-black px-3.5 py-2 rounded-xl transition-all shadow-sm flex items-center gap-1.5 ${
+                      uploadingDoc === 'agreement'
+                        ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                        : 'bg-emerald-500 hover:bg-emerald-600 text-white active:scale-95'
+                    }`}>
+                      <span>{uploadingDoc === 'agreement' ? '↻ Uploading...' : project.agreement ? '📤 Replace Agreement' : '📤 Upload Agreement'}</span>
+                      <input
+                        type="file"
+                        accept=".pdf,image/*"
+                        className="hidden"
+                        disabled={uploadingDoc === 'agreement'}
+                        onChange={e => {
+                          if (e.target.files && e.target.files[0]) {
+                            handleDocUpload('agreement', e.target.files[0]);
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Other Files section */}
             <div className="px-5 pb-3 mt-4">
-              <p className="text-xs font-bold tracking-widest uppercase mb-3" style={{color:'#F0A500'}}>📁 Uploaded Files</p>
+              <p className="text-xs font-bold tracking-widest uppercase mb-3" style={{color:'#F0A500'}}>📁 All Uploaded Files</p>
               
               {!(project.site_photo || project.agreement || project.quotation || project.inst_photo_1 || project.inst_photo_2) && (
                 <p className="text-xs text-slate-500 mb-4 italic">No documents uploaded yet.</p>
@@ -973,9 +1205,10 @@ function Dashboard({ user }: { user?: any }) {
 
   const displayProjects = projects.filter(p => {
     const curStep = p.step ?? 1;
+    const isUpcl = p.status?.includes('UPCL') || p.needs_upcl || p.transferred_by === 'upcl';
     switch (loc.pathname) {
-      case '/upcl':         return curStep === 1;
-      case '/registration': return curStep === 1;
+      case '/upcl':         return curStep === 1 && isUpcl;
+      case '/registration': return curStep === 1 && !isUpcl;
       case '/quotation':    return curStep === 2;
       case '/agreement':    return curStep === 3;
       case '/loan':         return curStep === 4;
@@ -1128,6 +1361,19 @@ function Dashboard({ user }: { user?: any }) {
 
                   <div className="flex flex-wrap items-center gap-2 mb-3">
                     <StatusBadge status={p.status} />
+                    {loc.pathname === '/quotation' && (
+                      p.quotation
+                        ? <span className="text-xs bg-emerald-100 text-emerald-700 font-bold px-2 py-1 rounded-lg">📋 Quotation ✓</span>
+                        : <span className="text-xs bg-amber-100 text-amber-800 font-bold px-2 py-1 rounded-lg">⚠️ Quotation Pending</span>
+                    )}
+                    {loc.pathname === '/agreement' && (
+                      p.agreement
+                        ? <span className="text-xs bg-emerald-100 text-emerald-700 font-bold px-2 py-1 rounded-lg">📄 Agreement ✓</span>
+                        : <span className="text-xs bg-amber-100 text-amber-800 font-bold px-2 py-1 rounded-lg">⚠️ Agreement Pending</span>
+                    )}
+                    {(loc.pathname === '/upcl' || p.needs_upcl || p.status?.includes('UPCL')) && (
+                      <span className="text-xs bg-sky-100 text-sky-800 font-bold px-2 py-1 rounded-lg">🏛️ UPCL Issue</span>
+                    )}
                     {p.loan_approved
                       ? <span className="text-xs bg-emerald-100 text-emerald-700 font-bold px-2 py-1 rounded-lg">✅ Loan OK</span>
                       : <span className="text-xs bg-orange-100 text-orange-600 font-bold px-2 py-1 rounded-lg">⏳ Loan Pending</span>
@@ -1178,7 +1424,24 @@ function Dashboard({ user }: { user?: any }) {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4"><StatusBadge status={p.status} /></td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-1 items-start">
+                          <StatusBadge status={p.status} />
+                          {loc.pathname === '/quotation' && (
+                            p.quotation
+                              ? <span className="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded">📋 Quotation Attached</span>
+                              : <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded">⚠️ Quotation Missing</span>
+                          )}
+                          {loc.pathname === '/agreement' && (
+                            p.agreement
+                              ? <span className="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded">📄 Agreement Attached</span>
+                              : <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded">⚠️ Agreement Missing</span>
+                          )}
+                          {(loc.pathname === '/upcl' || p.needs_upcl || p.status?.includes('UPCL')) && (
+                            <span className="text-[10px] bg-sky-100 text-sky-800 font-bold px-2 py-0.5 rounded">🏛️ UPCL Issue</span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-6 py-4 w-40">
                         <div className="flex items-center gap-2">
                           <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">

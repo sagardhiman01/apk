@@ -122,6 +122,9 @@ async function initializeDatabase(dbPool) {
     try {
       await dbPool.query('ALTER TABLE projects ADD COLUMN previous_step INT');
     } catch(e) { /* already exists */ }
+    try {
+      await dbPool.query('ALTER TABLE projects ADD COLUMN needs_upcl BOOLEAN DEFAULT FALSE');
+    } catch(e) { /* already exists */ }
 
     // Create project_transfers table for complete transfer audit trail
     await dbPool.query(`
@@ -354,9 +357,12 @@ app.get('/api/projects', async (req, res) => {
     const role = req.query.role;
     // ROLE-BASED FILTERING (For Department Queues)
     if (role && role !== 'admin') {
-       if (role === 'bo_registration' || role === 'registration') { query += ' AND step = 1'; }
-       else if (role === 'bo_upcl' || role === 'upcl') { query += ' AND step = 1'; }
-       else if (role === 'bo_quotation' || role === 'quotation') { query += ' AND step = 2'; }
+        if (role === 'bo_registration' || role === 'registration') {
+          query += ' AND step = 1 AND (status NOT LIKE "%UPCL%" AND (needs_upcl IS NULL OR needs_upcl = 0))';
+        } else if (role === 'bo_upcl' || role === 'upcl') {
+          query += ' AND step = 1 AND (status LIKE "%UPCL%" OR needs_upcl = 1)';
+        }
+        else if (role === 'bo_quotation' || role === 'quotation') { query += ' AND step = 2'; }
        else if (role === 'bo_agreement' || role === 'agreement') { query += ' AND step = 3'; }
        else if (role === 'bo_loan' || role === 'loan') { query += ' AND step = 4'; }
        else if (role === 'bank') { query += ' AND step IN (5, 8)'; } // Bank handles 1st and 2nd disbursed
@@ -491,12 +497,14 @@ app.post('/api/projects/:id/transfer', async (req, res) => {
     const fromStep = existing[0].step || 1;
     const transferReason = reason ? String(reason).trim() : 'Transferred by worker';
     const workerName = transferred_by ? String(transferred_by).trim() : 'Worker';
+    const isUpclTarget = req.body.is_upcl || (targetStep === 1 && (String(status || '').includes('UPCL') || transferReason.toLowerCase().includes('upcl')));
+    const needsUpclVal = isUpclTarget ? 1 : (targetStep > 1 ? 0 : (existing[0].needs_upcl || 0));
 
     await getPool().query(
       `UPDATE projects 
-       SET step = ?, status = ?, transfer_remarks = ?, transferred_by = ?, previous_step = ?
+       SET step = ?, status = ?, transfer_remarks = ?, transferred_by = ?, previous_step = ?, needs_upcl = ?
        WHERE id = ?`,
-      [targetStep, status || `Step ${targetStep}`, transferReason, workerName, fromStep, id]
+      [targetStep, status || `Step ${targetStep}`, transferReason, workerName, fromStep, needsUpclVal, id]
     );
 
     try {
@@ -568,7 +576,7 @@ app.put('/api/projects/:id/document', async (req, res) => {
     const setClauses = [];
     const values = [];
     
-    const allowed = ['site_photo', 'agreement', 'quotation', 'inst_photo_1', 'inst_photo_2', 'failed_document', 'rejection_reason'];
+    const allowed = ['site_photo', 'agreement', 'quotation', 'inst_photo_1', 'inst_photo_2', 'failed_document', 'rejection_reason', 'needs_upcl'];
     for (const key of Object.keys(updates)) {
       if (allowed.includes(key)) {
         setClauses.push(`${key} = ?`);

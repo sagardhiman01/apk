@@ -299,6 +299,13 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
   onUpdateStep: (id: number, step: number, status: string) => Promise<void>;
 }) {
   const currentStep = project?.step ?? 0;
+  const isUPCL = Boolean(
+    (project?.status && (project.status.includes('UPCL') || project.status.toLowerCase().includes('upcl'))) ||
+    project?.needs_upcl ||
+    (project?.transfer_remarks && project.transfer_remarks.toLowerCase().includes('upcl')) ||
+    project?.transferred_by === 'upcl'
+  );
+  const [showUPCLModal, setShowUPCLModal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [reminderMsg, setReminderMsg] = useState('');
   const slideY = useRef(new Animated.Value(800)).current;
@@ -414,6 +421,34 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
                 ))}
               </View>
             </View>
+
+            {/* UPCL Verification Banner: ONLY shown when project is routed to UPCL */}
+            {isUPCL && (
+              <View style={{ backgroundColor: C.blue + '18', borderRadius: 20, padding: 18, marginBottom: 16, borderWidth: 1.5, borderColor: C.blue + '55' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                  <Text style={{ fontSize: 28 }}>🏛️</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: C.blue, fontSize: 16, fontWeight: '900' }}>UPCL Portal Verification</Text>
+                    <Text style={{ color: C.gold, fontSize: 12, fontWeight: '700', marginTop: 1 }}>Electricity Bill / Name Discrepancy</Text>
+                  </View>
+                </View>
+                <Text style={{ color: C.text2, fontSize: 12, lineHeight: 18, marginBottom: 10 }}>
+                  This application has been referred to the UPCL department by the registration team to resolve a document requirement (e.g. electricity bill mismatch or connection transfer).
+                </Text>
+                {project.transfer_remarks && (
+                  <View style={{ backgroundColor: C.card, borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: C.border }}>
+                    <Text style={{ color: C.text3, fontSize: 10, fontWeight: '800', letterSpacing: 1 }}>WORKER REMARK</Text>
+                    <Text style={{ color: C.text, fontSize: 12, fontWeight: '600', marginTop: 4 }}>"{project.transfer_remarks}"</Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  onPress={() => setShowUPCLModal(true)}
+                  style={{ backgroundColor: C.blue, borderRadius: 14, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800' }}>🌐 Open UPCL Status & Portal</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {project.failed_document && (
               <View style={{ backgroundColor: C.red + '20', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: C.red + '50' }}>
@@ -629,6 +664,15 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
               </View>
             </View>
           </ScrollView>
+
+          {/* Modal for UPCL Portal when user taps the UPCL option */}
+          {showUPCLModal && (
+            <Modal visible={showUPCLModal} transparent animationType="slide" onRequestClose={() => setShowUPCLModal(false)}>
+              <View style={{ flex: 1, backgroundColor: C.bg }}>
+                <UPCLWaiting project={project} onClose={() => setShowUPCLModal(false)} />
+              </View>
+            </Modal>
+          )}
         </Animated.View>
       </Animated.View>
     </Modal>
@@ -853,14 +897,20 @@ function ProjectCard({ project, onPress, index }: { project: any; onPress: () =>
   }, []);
 
   const pct = (((project.step || 1) - 1) / 10) * 100;
-  const stepColors = [C.text3, C.blue, C.purple, C.gold, C.orange, C.green, C.gold, C.blue, C.teal, C.green, C.orange, C.purple];
-  const col = stepColors[Math.min(project.step || 1, 11)];
+  const isUPCL = Boolean(
+    (project?.status && (project.status.includes('UPCL') || project.status.toLowerCase().includes('upcl'))) ||
+    project?.needs_upcl ||
+    (project?.transfer_remarks && project.transfer_remarks.toLowerCase().includes('upcl')) ||
+    project?.transferred_by === 'upcl'
+  );
+  const stepColors = [C.text3, C.blue, C.purple, C.gold, C.goldLight, C.green, C.gold, C.blue, C.purple, C.green, C.gold, C.purple];
+  const col = isUPCL ? C.blue : stepColors[Math.min(project.step || 1, 11)];
 
   return (
     <Animated.View style={{ opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [28, 0] }) }, { scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) }] }}>
       <TouchableOpacity onPress={onPress} activeOpacity={0.82} style={{
         backgroundColor: C.card, borderRadius: 22, padding: 18, marginBottom: 12,
-        borderWidth: 1, borderColor: C.border,
+        borderWidth: 1, borderColor: isUPCL ? C.blue + '60' : C.border,
         shadowColor: col, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.1, shadowRadius: 16, elevation: 4,
       }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16 }}>
@@ -874,7 +924,7 @@ function ProjectCard({ project, onPress, index }: { project: any; onPress: () =>
           </View>
           <View style={{ alignItems: 'flex-end', gap: 5 }}>
             <View style={{ backgroundColor: col + '20', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: col + '45' }}>
-              <Text style={{ color: col, fontSize: 10, fontWeight: '800' }}>{project.step || 1}/5</Text>
+              <Text style={{ color: col, fontSize: 10, fontWeight: '800' }}>{isUPCL ? '🏛️ UPCL' : `${project.step || 1}/10`}</Text>
             </View>
             {project.failed_document && <Text style={{ color: C.red, fontSize: 10, fontWeight: '700' }}>⚠️ Rejected</Text>}
           </View>
@@ -886,8 +936,10 @@ function ProjectCard({ project, onPress, index }: { project: any; onPress: () =>
 
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <PulsingDot color={pct >= 100 ? C.green : C.gold} />
-            <Text style={{ color: C.text2, fontSize: 12 }}>{project.status || 'Registration'}</Text>
+            <PulsingDot color={pct >= 100 ? C.green : isUPCL ? C.blue : C.gold} />
+            <Text style={{ color: isUPCL ? C.blue : C.text2, fontSize: 12, fontWeight: isUPCL ? '700' : '400' }}>
+              {isUPCL ? '🏛️ UPCL Verification (Bill Issue)' : (project.status || 'Registration')}
+            </Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Text style={{ color: C.gold, fontSize: 12, fontWeight: '700' }}>View Details</Text>
