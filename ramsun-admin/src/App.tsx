@@ -232,6 +232,19 @@ const ROLE_ALLOWED_STEPS: Record<string, number[]> = {
   bo_subsidy:      [10],
 };
 
+const WORKFLOW_STEPS = [
+  { id: 1, status: 'Registration',          icon: '📄', desc: 'Files login & details fill (UPCL if transfer)', role: 'bo_registration', dept: 'Registration / UPCL' },
+  { id: 2, status: 'Quotation + Sign',      icon: '✍️', desc: 'Quotation + upload sign document', role: 'bo_quotation', dept: 'Quotation (BO)' },
+  { id: 3, status: 'Agreement',             icon: '🤝', desc: 'Upload agreement + quotation', role: 'bo_agreement', dept: 'Agreement (BO)' },
+  { id: 4, status: 'Loan Apply',            icon: '📝', desc: 'Loan apply submitted', role: 'bo_loan', dept: 'Loan Apply (BO)' },
+  { id: 5, status: 'Loan Disbursed',        icon: '🏦', desc: 'Loan disbursed (or tag with remark)', role: 'bank', dept: 'Bank (1st Disbursed)' },
+  { id: 6, status: 'Material Dispatch',     icon: '🚚', desc: 'Materials dispatched to site', role: 'store', dept: 'Store / Dispatch' },
+  { id: 7, status: 'Complete Installation', icon: '⚡', desc: 'Panel & Inverter # with Geotag photo', role: 'installation', dept: 'Installation' },
+  { id: 8, status: 'Second Disbursed',      icon: '💸', desc: 'Second loan amount disbursed', role: 'bank', dept: 'Bank (2nd Disbursed)' },
+  { id: 9, status: 'Upload Inst. (DCR)',    icon: '📤', desc: 'Upload installation with DCR', role: 'bo_upload_inst', dept: 'Upload Inst. (BO)' },
+  { id: 10, status: 'Subsidy Redeem',       icon: '🎁', desc: 'Subsidy claimed and redeemed', role: 'bo_subsidy', dept: 'Subsidy Redeem (BO)' },
+];
+
 function getAllowedSteps(pathname: string, user?: any): number[] {
   // If user has a department role (not admin), their role strictly defines what they can mark:
   if (user && user.role && user.role !== 'admin') {
@@ -245,13 +258,224 @@ function getAllowedSteps(pathname: string, user?: any): number[] {
   return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 }
 
+/* ─── Project Transfer Modal (Worker to Worker / Step 1 to 10) ─────────────── */
+function TransferModal({ project, initialStep, currentUser, onClose, onTransferred }: {
+  project: any;
+  initialStep?: number;
+  currentUser?: any;
+  onClose: () => void;
+  onTransferred: (message: string) => void;
+}) {
+  const cur = project.step ?? 1;
+  const [targetStep, setTargetStep] = useState<number>(initialStep || (cur === 1 ? 2 : 1));
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [history, setHistory] = useState<any[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const currentStepObj = WORKFLOW_STEPS.find(s => s.id === cur);
+  const targetStepObj = WORKFLOW_STEPS.find(s => s.id === targetStep);
+
+  useEffect(() => {
+    fetch(`${API}/projects/${project.id}/transfers`)
+      .then(res => res.json())
+      .then(data => { if (Array.isArray(data)) setHistory(data); })
+      .catch(() => {});
+  }, [project.id]);
+
+  const handleTransfer = async () => {
+    if (!reason.trim()) {
+      alert('Please write a reason or note for transferring this project.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const res = await fetch(`${API}/projects/${project.id}/transfer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to_step: targetStep,
+          status: targetStepObj?.status || `Step ${targetStep}`,
+          reason: reason.trim(),
+          transferred_by: currentUser?.role || currentUser?.email || 'Worker'
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Transfer failed');
+      }
+      onTransferred(`Project #${project.id} transferred to Step ${targetStep}: "${targetStepObj?.status}" ✓`);
+    } catch (e: any) {
+      alert(e.message || 'Transfer failed. Please check connection.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-sm" />
+      <div
+        className="relative bg-white rounded-3xl shadow-2xl w-full max-w-xl flex flex-col overflow-hidden border border-slate-100"
+        style={{ animation: 'slideUp .25s ease', maxHeight: '92vh' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 px-5 sm:px-6 py-4 flex justify-between items-center text-slate-950 flex-shrink-0 shadow-sm">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🔄</span>
+              <h2 className="text-base sm:text-lg font-black tracking-tight">Transfer Project to Worker / Dept</h2>
+            </div>
+            <p className="text-xs font-semibold text-slate-900/80 mt-0.5">
+              Project #{project.id} · {project.customer_name || project.customer || '—'}
+            </p>
+          </div>
+          <button onClick={onClose} className="bg-black/10 hover:bg-black/20 text-slate-950 rounded-xl p-2 transition-colors cursor-pointer">
+            <Icons.X />
+          </button>
+        </div>
+
+        {/* Current Location Bar */}
+        <div className="bg-amber-50/80 px-5 sm:px-6 py-2.5 border-b border-amber-200/60 flex items-center justify-between text-xs flex-shrink-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-slate-500">Current Step:</span>
+            <span className="font-extrabold px-2 py-0.5 rounded-md bg-amber-200 text-amber-950">
+              Step {cur}: {currentStepObj?.status} ({currentStepObj?.dept})
+            </span>
+          </div>
+          <span className="text-[11px] text-slate-500 hidden sm:inline">
+            Sender: <strong className="text-slate-700">{currentUser?.role || currentUser?.email || 'Worker'}</strong>
+          </span>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+          {/* Target Step Selector */}
+          <div>
+            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+              Select Destination Step / Worker (1 to 10):
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {WORKFLOW_STEPS.map(s => {
+                const isSelected = targetStep === s.id;
+                const isCurrent = cur === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setTargetStep(s.id)}
+                    className={`text-left p-2.5 sm:p-3 rounded-xl border-2 transition-all flex items-center gap-3 cursor-pointer ${
+                      isSelected
+                        ? 'border-yellow-500 bg-yellow-50/80 shadow-sm ring-2 ring-yellow-400/40'
+                        : 'border-slate-100 hover:border-slate-200 bg-slate-50/60 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="text-xl shrink-0">{s.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={`text-xs font-bold ${isSelected ? 'text-slate-950' : 'text-slate-700'}`}>
+                          Step {s.id}: {s.status}
+                        </span>
+                        {isCurrent && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800">
+                            Current
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400 truncate">{s.dept}</p>
+                    </div>
+                    {isSelected && (
+                      <span className="w-5 h-5 rounded-full bg-yellow-400 text-slate-950 font-black flex items-center justify-center text-xs shrink-0">
+                        ✓
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Reason / Remarks Textarea */}
+          <div>
+            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+              Reason / Note for Receiving Worker <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              rows={3}
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              placeholder="e.g. Aadhar card not clear, please re-upload in Step 1. Or: Client approved loan, forwarding for dispatch..."
+              className="w-full text-xs sm:text-sm p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-400 bg-slate-50/50 focus:bg-white resize-none"
+            />
+          </div>
+
+          {/* Transfer History Accordion */}
+          {history.length > 0 && (
+            <div className="border border-slate-200 rounded-2xl overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowHistory(!showHistory)}
+                className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100 text-left flex justify-between items-center text-xs font-bold text-slate-600 transition-colors cursor-pointer"
+              >
+                <span>📜 Transfer History ({history.length} movement{history.length > 1 ? 's' : ''})</span>
+                <span>{showHistory ? '▲ Hide' : '▼ View'}</span>
+              </button>
+              {showHistory && (
+                <div className="p-3 bg-white divide-y divide-slate-100 space-y-2 max-h-40 overflow-y-auto">
+                  {history.map((h: any, idx: number) => (
+                    <div key={idx} className="pt-2 first:pt-0 text-xs">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-slate-800">
+                          Step {h.from_step} ➔ Step {h.to_step}
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {new Date(h.created_at).toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                      <p className="text-slate-600 text-[11px] mt-0.5">
+                        By <strong className="text-slate-800">{h.transferred_by || 'Staff'}</strong>: "{h.reason}"
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 sm:px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center flex-shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-xs sm:text-sm font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleTransfer}
+            disabled={busy || !reason.trim()}
+            className="px-5 sm:px-6 py-2.5 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-500 hover:to-amber-600 disabled:opacity-50 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
+          >
+            {busy ? <span className="animate-spin text-sm">↻</span> : <span>Confirm Transfer 🔁</span>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Project Edit Modal ───────────────────────────────────────────────────── */
-function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant, onDelete, currentUser, currentPath }: {
+function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant, onDelete, onOpenTransfer, currentUser, currentPath }: {
   project: any; onClose: () => void;
   onUpdate: (id: number, step: number, status: string, failed_doc?: string | null, reason?: string | null, bank_remarks?: string | null) => Promise<void>;
   onLoanApprove: (id: number) => Promise<void>;
   onSaveApplicant: (id: number, data: any) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
+  onOpenTransfer?: (project: any, preselectStep?: number) => void;
   currentUser?: any;
   currentPath?: string;
 }) {
@@ -267,18 +491,7 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
     pan_number: project.pan_number || '',
     meter_number: project.meter_number || '',
   });
-  const steps = [
-    { id: 1, status: 'Registration',          icon: '📄', desc: 'Files login & details fill (UPCL if transfer)', role: 'bo_registration', dept: 'Registration' },
-    { id: 2, status: 'Quotation + Sign',      icon: '✍️', desc: 'Quotation + upload sign document', role: 'bo_quotation', dept: 'Quotation' },
-    { id: 3, status: 'Agreement',             icon: '🤝', desc: 'Upload agreement + quotation', role: 'bo_agreement', dept: 'Agreement' },
-    { id: 4, status: 'Loan Apply',            icon: '📝', desc: 'Loan apply submitted', role: 'bo_loan', dept: 'Loan Apply' },
-    { id: 5, status: 'Loan Disbursed',        icon: '🏦', desc: 'Loan disbursed (or tag with remark)', role: 'bank', dept: 'Bank' },
-    { id: 6, status: 'Material Dispatch',     icon: '🚚', desc: 'Materials dispatched to site', role: 'store', dept: 'Store' },
-    { id: 7, status: 'Complete Installation', icon: '⚡', desc: 'Panel & Inverter # with Geotag photo', role: 'installation', dept: 'Installation' },
-    { id: 8, status: 'Second Disbursed',      icon: '💸', desc: 'Second loan amount disbursed', role: 'bank', dept: 'Bank' },
-    { id: 9, status: 'Upload Inst. (DCR)',    icon: '📤', desc: 'Upload installation with DCR', role: 'bo_upload_inst', dept: 'Upload Inst.' },
-    { id: 10, status: 'Subsidy Redeem',       icon: '🎁', desc: 'Subsidy claimed and redeemed', role: 'bo_subsidy', dept: 'Subsidy' },
-  ];
+  const steps = WORKFLOW_STEPS;
   const cur = project.step ?? 1;
   const pct = Math.min(100, Math.round(((Math.max(1, cur) - 1) / 10) * 100));
   const allowedSteps = getAllowedSteps(currentPath || '', currentUser);
@@ -340,11 +553,19 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
               </h2>
             </div>
             <div className="flex gap-1.5 flex-shrink-0">
-              <button onClick={() => setMode(mode === 'steps' ? 'edit' : 'steps')} className="text-slate-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-xl px-2.5 py-2 transition-colors text-xs font-bold flex items-center gap-1 whitespace-nowrap">
+              <button
+                onClick={() => onOpenTransfer && onOpenTransfer(project)}
+                className="text-amber-300 hover:text-white bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/40 rounded-xl px-2.5 py-2 transition-colors text-xs font-bold flex items-center gap-1 whitespace-nowrap cursor-pointer shadow-sm"
+                title="Transfer project to any department / worker (1 to 10)"
+              >
+                <span>🔄</span>
+                <span>Transfer</span>
+              </button>
+              <button onClick={() => setMode(mode === 'steps' ? 'edit' : 'steps')} className="text-slate-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-xl px-2.5 py-2 transition-colors text-xs font-bold flex items-center gap-1 whitespace-nowrap cursor-pointer">
                 <span>{mode === 'steps' ? '✏️' : '📋'}</span>
                 <span>{mode === 'steps' ? 'Edit Info' : 'Steps'}</span>
               </button>
-              <button onClick={onClose} className="text-slate-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-xl p-2 transition-colors flex-shrink-0">
+              <button onClick={onClose} className="text-slate-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-xl p-2 transition-colors flex-shrink-0 cursor-pointer">
                 <Icons.X />
               </button>
             </div>
@@ -391,6 +612,31 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
 
         {/* Scrollable content area */}
         <div className="flex-1 overflow-y-auto">
+        {project.transfer_remarks && (
+          <div className="mx-4 sm:mx-5 mt-4 p-3.5 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-2xl flex items-start gap-3 shadow-sm">
+            <span className="text-2xl shrink-0">🔄</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-black text-amber-800 uppercase tracking-wide">
+                  Project Transferred
+                </span>
+                {project.previous_step && (
+                  <span className="text-[10px] bg-amber-200 text-amber-900 font-extrabold px-2 py-0.5 rounded-full">
+                    From Step {project.previous_step}
+                  </span>
+                )}
+                {project.transferred_by && (
+                  <span className="text-[11px] text-slate-500">
+                    by <strong className="text-slate-800">{project.transferred_by}</strong>
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-amber-950 font-semibold mt-1">
+                "{project.transfer_remarks}"
+              </p>
+            </div>
+          </div>
+        )}
         {mode === 'steps' ? (
           <>
             {/* Steps list */}
@@ -454,9 +700,9 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
                     </div>
 
                     {/* Action Button / Badge */}
-                    <div className="shrink-0 z-10">
+                    <div className="shrink-0 z-10 flex items-center gap-1.5">
                       {isDone && (
-                        <span className="text-emerald-600 text-xs font-black px-2.5 py-1">
+                        <span className="text-emerald-600 text-xs font-black px-2 py-1">
                           Done ✓
                         </span>
                       )}
@@ -474,10 +720,15 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
                           🔒 Locked
                         </span>
                       )}
-                      {isUpcoming && (
-                        <span className="text-xs text-slate-400 font-medium">
-                          Pending
-                        </span>
+                      {!isCurrent && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenTransfer && onOpenTransfer(project, s.id)}
+                          title={`Transfer directly to Step ${s.id}: ${s.status}`}
+                          className="text-[11px] text-amber-800 hover:text-amber-950 bg-amber-100 hover:bg-amber-200 px-2.5 py-1.5 rounded-xl font-bold transition-all flex items-center gap-1 active:scale-95 cursor-pointer border border-amber-300/60"
+                        >
+                          <span>Send Here ↗</span>
+                        </button>
                       )}
                     </div>
                   </div>
@@ -652,6 +903,7 @@ function Dashboard({ user }: { user?: any }) {
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<any>(null);
+  const [transferTarget, setTransferTarget] = useState<{ project: any; initialStep?: number } | null>(null);
   const [spinning, setSpinning] = useState(false);
   const [toast, setToast] = useState('');
   const [search, setSearch] = useState('');
@@ -803,7 +1055,7 @@ function Dashboard({ user }: { user?: any }) {
           </select>
           <button
             onClick={load}
-            className="flex items-center justify-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-bold text-sm px-5 py-2.5 rounded-xl shadow-md shadow-yellow-200 hover:shadow-lg transition-all w-full sm:w-auto"
+            className="flex items-center justify-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-bold text-sm px-5 py-2.5 rounded-xl shadow-md shadow-yellow-200 hover:shadow-lg transition-all w-full sm:w-auto cursor-pointer"
           >
             <span className={spinning ? 'animate-spin inline-block' : 'inline-block'}><Icons.RotateCw /></span>
             Refresh
@@ -843,7 +1095,7 @@ function Dashboard({ user }: { user?: any }) {
             <div className="lg:hidden divide-y divide-slate-100">
               {displayProjects.map(p => (
                 <div key={p.id} className="p-4 sm:p-5 hover:bg-yellow-50/30 transition-colors">
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center text-white font-black text-sm flex-shrink-0">
                         {(p.customer_name || p.customer || '?')[0].toUpperCase()}
@@ -853,13 +1105,31 @@ function Dashboard({ user }: { user?: any }) {
                         <p className="text-xs text-slate-400 font-mono">{p.client_id ? `#${p.client_id}` : `#${p.id}`}</p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => setSelected(p)}
-                      className="flex items-center gap-1.5 text-xs font-bold bg-slate-900 text-white px-3.5 py-2 rounded-xl transition-all duration-200 active:scale-95"
-                    >
-                      Edit <Icons.ChevronRight />
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setTransferTarget({ project: p })}
+                        className="flex items-center gap-1 text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300/80 hover:bg-amber-100 px-2.5 py-2 rounded-xl transition-all active:scale-95 cursor-pointer"
+                      >
+                        <span>🔄</span> Transfer
+                      </button>
+                      <button
+                        onClick={() => setSelected(p)}
+                        className="flex items-center gap-1.5 text-xs font-bold bg-slate-900 text-white px-3.5 py-2 rounded-xl transition-all duration-200 active:scale-95 cursor-pointer"
+                      >
+                        Edit <Icons.ChevronRight />
+                      </button>
+                    </div>
                   </div>
+
+                  {p.transfer_remarks && (
+                    <div className="mb-2.5 p-2 bg-amber-50/90 border border-amber-200/80 rounded-xl text-[11px] text-amber-900 flex items-start gap-1.5">
+                      <span className="text-xs shrink-0">🔄</span>
+                      <div className="truncate flex-1">
+                        <strong className="text-amber-800">Transferred (Step {p.previous_step || '?'}):</strong> {p.transfer_remarks}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap items-center gap-2 mb-3">
                     <StatusBadge status={p.status} />
                     {p.loan_approved
@@ -870,9 +1140,9 @@ function Dashboard({ user }: { user?: any }) {
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                       <div className="h-full bg-gradient-to-r from-yellow-400 to-emerald-500 rounded-full transition-all duration-700"
-                        style={{ width: `${((p.step ?? 0) / 9) * 100}%` }} />
+                        style={{ width: `${((p.step ?? 0) / 10) * 100}%` }} />
                     </div>
-                    <span className="text-xs text-slate-400 font-medium shrink-0">{p.step ?? 0}/9 steps</span>
+                    <span className="text-xs text-slate-400 font-medium shrink-0">{p.step ?? 0}/10 steps</span>
                   </div>
                 </div>
               ))}
@@ -902,7 +1172,14 @@ function Dashboard({ user }: { user?: any }) {
                           <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center text-white font-black text-xs flex-shrink-0">
                             {(p.customer_name || p.customer || '?')[0].toUpperCase()}
                           </div>
-                          <span className="text-sm font-semibold text-slate-800">{p.customer_name || p.customer || '—'}</span>
+                          <div>
+                            <span className="text-sm font-semibold text-slate-800">{p.customer_name || p.customer || '—'}</span>
+                            {p.transfer_remarks && (
+                              <p className="text-[10px] text-amber-700 font-bold flex items-center gap-1 truncate max-w-[200px]" title={p.transfer_remarks}>
+                                <span>🔄</span> Transferred (Step {p.previous_step || '?'})
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4"><StatusBadge status={p.status} /></td>
@@ -910,9 +1187,9 @@ function Dashboard({ user }: { user?: any }) {
                         <div className="flex items-center gap-2">
                           <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                             <div className="h-full bg-gradient-to-r from-yellow-400 to-emerald-500 rounded-full transition-all duration-700"
-                              style={{ width: `${((p.step ?? 0) / 11) * 100}%` }} />
+                              style={{ width: `${((p.step ?? 0) / 10) * 100}%` }} />
                           </div>
-                          <span className="text-xs text-slate-400 font-medium w-8 shrink-0">{p.step ?? 0}/11</span>
+                          <span className="text-xs text-slate-400 font-medium w-8 shrink-0">{p.step ?? 0}/10</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -922,12 +1199,22 @@ function Dashboard({ user }: { user?: any }) {
                         }
                       </td>
                       <td className="px-6 py-4">
-                        <button
-                          onClick={() => setSelected(p)}
-                          className="flex items-center gap-1.5 text-xs font-bold bg-slate-900 group-hover:bg-yellow-400 text-white group-hover:text-slate-900 px-4 py-2 rounded-xl transition-all duration-200"
-                        >
-                          Edit <Icons.ChevronRight />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setSelected(p)}
+                            className="flex items-center gap-1.5 text-xs font-bold bg-slate-900 group-hover:bg-yellow-400 text-white group-hover:text-slate-900 px-3.5 py-2 rounded-xl transition-all duration-200 cursor-pointer"
+                          >
+                            Edit <Icons.ChevronRight />
+                          </button>
+                          <button
+                            onClick={() => setTransferTarget({ project: p })}
+                            title="Transfer project to any department / worker (1 to 10)"
+                            className="flex items-center gap-1 text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 px-3 py-2 rounded-xl transition-all active:scale-95 whitespace-nowrap cursor-pointer shadow-sm"
+                          >
+                            <span>🔄</span>
+                            <span>Transfer</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -946,8 +1233,26 @@ function Dashboard({ user }: { user?: any }) {
           onLoanApprove={loanApprove}
           onSaveApplicant={saveApplicant}
           onDelete={del}
+          onOpenTransfer={(proj, step) => setTransferTarget({ project: proj, initialStep: step })}
           currentUser={user}
           currentPath={loc.pathname}
+        />
+      )}
+
+      {transferTarget && (
+        <TransferModal
+          project={transferTarget.project}
+          initialStep={transferTarget.initialStep}
+          currentUser={user}
+          onClose={() => setTransferTarget(null)}
+          onTransferred={(msg) => {
+            setTransferTarget(null);
+            setSelected(null);
+            load();
+            if (toastTimer.current) clearTimeout(toastTimer.current);
+            setToast(msg);
+            toastTimer.current = setTimeout(() => setToast(''), 3500);
+          }}
         />
       )}
     </div>

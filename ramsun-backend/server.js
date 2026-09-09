@@ -112,6 +112,30 @@ async function initializeDatabase(dbPool) {
       await dbPool.query('ALTER TABLE projects ADD COLUMN bank_remarks TEXT AFTER loan_approved');
     } catch(e) { /* column already exists, ignore */ }
 
+    // Add transfer columns to projects table
+    try {
+      await dbPool.query('ALTER TABLE projects ADD COLUMN transfer_remarks TEXT');
+    } catch(e) { /* already exists */ }
+    try {
+      await dbPool.query('ALTER TABLE projects ADD COLUMN transferred_by VARCHAR(100)');
+    } catch(e) { /* already exists */ }
+    try {
+      await dbPool.query('ALTER TABLE projects ADD COLUMN previous_step INT');
+    } catch(e) { /* already exists */ }
+
+    // Create project_transfers table for complete transfer audit trail
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS project_transfers (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        project_id INT NOT NULL,
+        from_step INT NOT NULL,
+        to_step INT NOT NULL,
+        transferred_by VARCHAR(100),
+        reason TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Create reminders table
     await dbPool.query(`
       CREATE TABLE IF NOT EXISTS reminders (
@@ -330,16 +354,16 @@ app.get('/api/projects', async (req, res) => {
     const role = req.query.role;
     // ROLE-BASED FILTERING (For Department Queues)
     if (role && role !== 'admin') {
-       if (role === 'bo_registration') { query += ' AND step = 1'; }
-       else if (role === 'bo_upcl') { query += ' AND step = 2'; }
-       else if (role === 'bo_quotation') { query += ' AND step = 3'; }
-       else if (role === 'bo_agreement') { query += ' AND step = 4'; }
-       else if (role === 'bo_loan') { query += ' AND step = 5'; }
-       else if (role === 'bank') { query += ' AND step IN (6, 9)'; } // Bank handles 1st and 2nd disbursed
-       else if (role === 'store') { query += ' AND step = 7'; }
-       else if (role === 'installation') { query += ' AND step = 8'; }
-       else if (role === 'bo_upload_inst') { query += ' AND step = 10'; }
-       else if (role === 'bo_subsidy') { query += ' AND step = 11'; }
+       if (role === 'bo_registration' || role === 'registration') { query += ' AND step = 1'; }
+       else if (role === 'bo_upcl' || role === 'upcl') { query += ' AND step = 1'; }
+       else if (role === 'bo_quotation' || role === 'quotation') { query += ' AND step = 2'; }
+       else if (role === 'bo_agreement' || role === 'agreement') { query += ' AND step = 3'; }
+       else if (role === 'bo_loan' || role === 'loan') { query += ' AND step = 4'; }
+       else if (role === 'bank') { query += ' AND step IN (5, 8)'; } // Bank handles 1st and 2nd disbursed
+       else if (role === 'store' || role === 'dispatch') { query += ' AND step = 6'; }
+       else if (role === 'installation') { query += ' AND step = 7'; }
+       else if (role === 'bo_upload_inst' || role === 'upload_inst') { query += ' AND step = 9'; }
+       else if (role === 'bo_subsidy' || role === 'subsidy') { query += ' AND step = 10'; }
     }
 
     if (search) {
@@ -403,7 +427,7 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
 app.put('/api/projects/:id/step', async (req, res) => {
   try {
     const { id } = req.params;
-    const { step, status, failed_document, rejection_reason, bank_remarks } = req.body;
+    const { step, status, failed_document, rejection_reason, bank_remarks, transfer_remarks, transferred_by, previous_step } = req.body;
     
     if (step < 1 || step > 12) return res.status(400).json({ error: 'Invalid step' });
 
@@ -414,15 +438,98 @@ app.put('/api/projects/:id/step', async (req, res) => {
       q += ', bank_remarks=?';
       params.push(bank_remarks);
     }
+    if (transfer_remarks !== undefined) {
+      q += ', transfer_remarks=?';
+      params.push(transfer_remarks);
+    }
+    if (transferred_by !== undefined) {
+      q += ', transferred_by=?';
+      params.push(transferred_by);
+    }
+    if (previous_step !== undefined) {
+      q += ', previous_step=?';
+      params.push(previous_step);
+    }
 
     q += ' WHERE id=?';
     params.push(id);
 
     await getPool().query(q, params);
+
+    // If it was a transfer, also record into project_transfers
+    if (previous_step !== undefined || transfer_remarks) {
+      try {
+        await getPool().query(
+          'INSERT INTO project_transfers (project_id, from_step, to_step, transferred_by, reason) VALUES (?, ?, ?, ?, ?)',
+          [id, previous_step || 0, step, transferred_by || 'Staff', transfer_remarks || '']
+        );
+      } catch (err) {
+        console.warn('Could not record transfer history:', err.message);
+      }
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error('Error updating project:', error.message);
     res.status(500).json({ error: 'Unable to update project' });
+  }
+});
+
+// Dedicated Transfer Endpoint (Worker to Worker / Step 1 to 10 bidirectional)
+app.post('/api/projects/:id/transfer', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { to_step, status, reason, transferred_by } = req.body;
+    const targetStep = parseInt(to_step);
+    if (isNaN(targetStep) || targetStep < 1 || targetStep > 12) {
+      return res.status(400).json({ error: 'Invalid target step' });
+    }
+
+    const [existing] = await getPool().query('SELECT id, step, status FROM projects WHERE id = ?', [id]);
+    if (existing.length === 0) return res.status(404).json({ error: 'Project not found' });
+
+    const fromStep = existing[0].step || 1;
+    const transferReason = reason ? String(reason).trim() : 'Transferred by worker';
+    const workerName = transferred_by ? String(transferred_by).trim() : 'Worker';
+
+    await getPool().query(
+      `UPDATE projects 
+       SET step = ?, status = ?, transfer_remarks = ?, transferred_by = ?, previous_step = ?
+       WHERE id = ?`,
+      [targetStep, status || `Step ${targetStep}`, transferReason, workerName, fromStep, id]
+    );
+
+    try {
+      await getPool().query(
+        'INSERT INTO project_transfers (project_id, from_step, to_step, transferred_by, reason) VALUES (?, ?, ?, ?, ?)',
+        [id, fromStep, targetStep, workerName, transferReason]
+      );
+    } catch (e) {
+      console.warn('Failed to record project_transfers:', e.message);
+    }
+
+    res.json({ 
+      success: true, 
+      message: `Project #${id} successfully transferred to Step ${targetStep}` 
+    });
+  } catch (error) {
+    console.error('Error transferring project:', error);
+    res.status(500).json({ error: 'Failed to transfer project' });
+  }
+});
+
+// Get Project Transfer History
+app.get('/api/projects/:id/transfers', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [rows] = await getPool().query(
+      'SELECT * FROM project_transfers WHERE project_id = ? ORDER BY created_at DESC',
+      [id]
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error('Error fetching transfers:', error);
+    res.status(500).json({ error: 'Failed to fetch transfer history' });
   }
 });
 
