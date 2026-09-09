@@ -233,16 +233,16 @@ const ROLE_ALLOWED_STEPS: Record<string, number[]> = {
 };
 
 const WORKFLOW_STEPS = [
-  { id: 1, status: 'Registration',          icon: '📄', desc: 'Files login & details fill (UPCL if transfer)', role: 'bo_registration', dept: 'Registration / UPCL' },
-  { id: 2, status: 'Quotation + Sign',      icon: '✍️', desc: 'Quotation + upload sign document', role: 'bo_quotation', dept: 'Quotation (BO)' },
-  { id: 3, status: 'Agreement',             icon: '🤝', desc: 'Upload agreement + quotation', role: 'bo_agreement', dept: 'Agreement (BO)' },
-  { id: 4, status: 'Loan Apply',            icon: '📝', desc: 'Loan apply submitted', role: 'bo_loan', dept: 'Loan Apply (BO)' },
-  { id: 5, status: 'Loan Disbursed',        icon: '🏦', desc: 'Loan disbursed (or tag with remark)', role: 'bank', dept: 'Bank (1st Disbursed)' },
-  { id: 6, status: 'Material Dispatch',     icon: '🚚', desc: 'Materials dispatched to site', role: 'store', dept: 'Store / Dispatch' },
-  { id: 7, status: 'Complete Installation', icon: '⚡', desc: 'Panel & Inverter # with Geotag photo', role: 'installation', dept: 'Installation' },
-  { id: 8, status: 'Second Disbursed',      icon: '💸', desc: 'Second loan amount disbursed', role: 'bank', dept: 'Bank (2nd Disbursed)' },
-  { id: 9, status: 'Upload Inst. (DCR)',    icon: '📤', desc: 'Upload installation with DCR', role: 'bo_upload_inst', dept: 'Upload Inst. (BO)' },
-  { id: 10, status: 'Subsidy Redeem',       icon: '🎁', desc: 'Subsidy claimed and redeemed', role: 'bo_subsidy', dept: 'Subsidy Redeem (BO)' },
+  { id: 1, status: 'Registration',          desc: 'Files login & details fill (UPCL if transfer)', role: 'bo_registration', dept: 'Registration / UPCL' },
+  { id: 2, status: 'Quotation + Sign',      desc: 'Quotation + upload sign document', role: 'bo_quotation', dept: 'Quotation (BO)' },
+  { id: 3, status: 'Agreement',             desc: 'Upload agreement + quotation', role: 'bo_agreement', dept: 'Agreement (BO)' },
+  { id: 4, status: 'Loan Apply',            desc: 'Loan apply submitted', role: 'bo_loan', dept: 'Loan Apply (BO)' },
+  { id: 5, status: 'Loan Disbursed',        desc: 'Loan disbursed (or tag with remark)', role: 'bank', dept: 'Bank (1st Disbursed)' },
+  { id: 6, status: 'Material Dispatch',     desc: 'Materials dispatched to site', role: 'store', dept: 'Store / Dispatch' },
+  { id: 7, status: 'Complete Installation', desc: 'Panel & Inverter # with Geotag photo', role: 'installation', dept: 'Installation' },
+  { id: 8, status: 'Second Disbursed',      desc: 'Second loan amount disbursed', role: 'bank', dept: 'Bank (2nd Disbursed)' },
+  { id: 9, status: 'Upload Inst. (DCR)',    desc: 'Upload installation with DCR', role: 'bo_upload_inst', dept: 'Upload Inst. (BO)' },
+  { id: 10, status: 'Subsidy Redeem',       desc: 'Subsidy claimed and redeemed', role: 'bo_subsidy', dept: 'Subsidy Redeem (BO)' },
 ];
 
 function getAllowedSteps(pathname: string, user?: any): number[] {
@@ -324,10 +324,7 @@ function TransferModal({ project, initialStep, currentUser, onClose, onTransferr
         {/* Header */}
         <div className="bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 px-5 sm:px-6 py-4 flex justify-between items-center text-slate-950 flex-shrink-0 shadow-sm">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xl">🔄</span>
-              <h2 className="text-base sm:text-lg font-black tracking-tight">Transfer Project to Worker / Dept</h2>
-            </div>
+            <h2 className="text-base sm:text-lg font-black tracking-tight">Transfer Project to Worker / Dept</h2>
             <p className="text-xs font-semibold text-slate-900/80 mt-0.5">
               Project #{project.id} · {project.customer_name || project.customer || '—'}
             </p>
@@ -366,28 +363,27 @@ function TransferModal({ project, initialStep, currentUser, onClose, onTransferr
                     key={s.id}
                     type="button"
                     onClick={() => setTargetStep(s.id)}
-                    className={`text-left p-2.5 sm:p-3 rounded-xl border-2 transition-all flex items-center gap-3 cursor-pointer ${
+                    className={`text-left p-3 rounded-xl border-2 transition-all flex items-center justify-between cursor-pointer ${
                       isSelected
                         ? 'border-yellow-500 bg-yellow-50/80 shadow-sm ring-2 ring-yellow-400/40'
                         : 'border-slate-100 hover:border-slate-200 bg-slate-50/60 hover:bg-slate-50'
                     }`}
                   >
-                    <span className="text-xl shrink-0">{s.icon}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className={`text-xs font-bold ${isSelected ? 'text-slate-950' : 'text-slate-700'}`}>
                           Step {s.id}: {s.status}
                         </span>
                         {isCurrent && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800">
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
                             Current
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-400 truncate">{s.dept}</p>
+                      <p className="text-[11px] text-slate-400 truncate mt-0.5">{s.dept}</p>
                     </div>
                     {isSelected && (
-                      <span className="w-5 h-5 rounded-full bg-yellow-400 text-slate-950 font-black flex items-center justify-center text-xs shrink-0">
+                      <span className="w-5 h-5 rounded-full bg-yellow-400 text-slate-950 font-black flex items-center justify-center text-xs shrink-0 ml-2">
                         ✓
                       </span>
                     )}
@@ -419,7 +415,7 @@ function TransferModal({ project, initialStep, currentUser, onClose, onTransferr
                 onClick={() => setShowHistory(!showHistory)}
                 className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100 text-left flex justify-between items-center text-xs font-bold text-slate-600 transition-colors cursor-pointer"
               >
-                <span>📜 Transfer History ({history.length} movement{history.length > 1 ? 's' : ''})</span>
+                <span>Transfer History ({history.length} movement{history.length > 1 ? 's' : ''})</span>
                 <span>{showHistory ? '▲ Hide' : '▼ View'}</span>
               </button>
               {showHistory && (
@@ -460,7 +456,7 @@ function TransferModal({ project, initialStep, currentUser, onClose, onTransferr
             disabled={busy || !reason.trim()}
             className="px-5 sm:px-6 py-2.5 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-500 hover:to-amber-600 disabled:opacity-50 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
           >
-            {busy ? <span className="animate-spin text-sm">↻</span> : <span>Confirm Transfer 🔁</span>}
+            {busy ? <span className="animate-spin text-sm">↻</span> : <span>Confirm Transfer</span>}
           </button>
         </div>
       </div>
@@ -679,7 +675,7 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
                       ) : isCurrent ? (
                         <span className="animate-spin text-xl text-yellow-500">↻</span>
                       ) : (
-                        <span className="text-xl filter grayscale opacity-70">{s.icon}</span>
+                        <span className="text-xs font-bold text-slate-400">{s.id}</span>
                       )}
                     </div>
                     <div className="flex-1 min-w-0 z-10">
