@@ -483,7 +483,7 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
   if (!project) return null;
 
   // Universal Document Upload for Mobile APK
-  const uploadProjectDoc = async (field: 'quotation' | 'agreement' | 'site_photo' | 'inst_photo_1' | 'inst_photo_2', label: string) => {
+  const uploadProjectDoc = async (field: 'quotation' | 'agreement' | 'site_photo' | 'inst_photo_1' | 'inst_photo_2' | 'dcr', label: string) => {
     try {
       setBusy(true);
       let asset: any = null;
@@ -492,8 +492,14 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
         if (!res.canceled && res.assets && res.assets.length > 0) {
           asset = res.assets[0];
         }
+      } else if (field === 'dcr') {
+        // As requested: DCR upload must redirect to Files/Storage (NOT gallery)
+        const res = await DocumentPicker.getDocumentAsync({ type: ['*/*'], copyToCacheDirectory: true });
+        if (!res.canceled && res.assets && res.assets.length > 0) {
+          asset = res.assets[0];
+        }
       } else {
-        const res = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'image/*'] });
+        const res = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'image/*'], copyToCacheDirectory: true });
         if (!res.canceled && res.assets && res.assets.length > 0) {
           asset = res.assets[0];
         }
@@ -809,15 +815,64 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
                     </View>
                   )}
 
-                  {/* STEP 10: Installation Photo 1 & 2 */}
-                  {s.id === 10 && (
-                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, paddingHorizontal: 4 }}>
-                      <TouchableOpacity onPress={() => uploadProjectDoc('inst_photo_1', 'Installation Photo 1')} style={{ flex: 1, height: 50, borderRadius: 12, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: project.inst_photo_1 ? C.gold : C.borderHi, borderStyle: project.inst_photo_1 ? 'solid' : 'dashed' }}>
-                        {project.inst_photo_1 ? <Text style={{ color: C.gold, fontSize: 12, fontWeight: '600' }}>✓ Photo 1</Text> : <Ionicons name="add" size={20} color={C.text2} />}
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => uploadProjectDoc('inst_photo_2', 'Installation Photo 2')} style={{ flex: 1, height: 50, borderRadius: 12, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: project.inst_photo_2 ? C.gold : C.borderHi, borderStyle: project.inst_photo_2 ? 'solid' : 'dashed' }}>
-                        {project.inst_photo_2 ? <Text style={{ color: C.gold, fontSize: 12, fontWeight: '600' }}>✓ Photo 2</Text> : <Ionicons name="add" size={20} color={C.text2} />}
-                      </TouchableOpacity>
+                  {/* STEP 7 & 10: Installation Photo 1 & 2 */}
+                  {(s.id === 7 || s.id === 10) && (
+                    <View style={{ marginTop: 8, paddingHorizontal: 4 }}>
+                      <Text style={{ color: C.text2, fontSize: 10, fontWeight: '700', marginBottom: 6, letterSpacing: 1 }}>INSTALLATION PHOTOS (1 & 2)</Text>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <View style={{ flex: 1, gap: 4 }}>
+                          {project.inst_photo_1 && (
+                            <TouchableOpacity
+                              onPress={() => Linking.openURL(project.inst_photo_1.startsWith('http') ? project.inst_photo_1 : `${API_URL.replace('/api', '')}${project.inst_photo_1}`)}
+                              style={{ backgroundColor: C.blue + '20', borderWidth: 1, borderColor: C.blue, borderRadius: 8, paddingVertical: 5, alignItems: 'center' }}
+                            >
+                              <Text style={{ color: C.blue, fontSize: 10, fontWeight: '800' }}>View / Download</Text>
+                            </TouchableOpacity>
+                          )}
+                          <TouchableOpacity onPress={() => uploadProjectDoc('inst_photo_1', 'Installation Photo 1')} style={{ height: 42, borderRadius: 10, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: project.inst_photo_1 ? C.gold : C.borderHi, borderStyle: project.inst_photo_1 ? 'solid' : 'dashed' }}>
+                            <Text style={{ color: project.inst_photo_1 ? C.gold : C.text2, fontSize: 11, fontWeight: '700' }}>{project.inst_photo_1 ? '🔄 Replace P1' : '+ Photo 1'}</Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        <View style={{ flex: 1, gap: 4 }}>
+                          {project.inst_photo_2 && (
+                            <TouchableOpacity
+                              onPress={() => Linking.openURL(project.inst_photo_2.startsWith('http') ? project.inst_photo_2 : `${API_URL.replace('/api', '')}${project.inst_photo_2}`)}
+                              style={{ backgroundColor: C.blue + '20', borderWidth: 1, borderColor: C.blue, borderRadius: 8, paddingVertical: 5, alignItems: 'center' }}
+                            >
+                              <Text style={{ color: C.blue, fontSize: 10, fontWeight: '800' }}>View / Download</Text>
+                            </TouchableOpacity>
+                          )}
+                          <TouchableOpacity onPress={() => uploadProjectDoc('inst_photo_2', 'Installation Photo 2')} style={{ height: 42, borderRadius: 10, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: project.inst_photo_2 ? C.gold : C.borderHi, borderStyle: project.inst_photo_2 ? 'solid' : 'dashed' }}>
+                            <Text style={{ color: project.inst_photo_2 ? C.gold : C.text2, fontSize: 11, fontWeight: '700' }}>{project.inst_photo_2 ? '🔄 Replace P2' : '+ Photo 2'}</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* STEP 9: Upload Inst. & DCR */}
+                  {s.id === 9 && (
+                    <View style={{ marginTop: 8, paddingHorizontal: 4, gap: 6 }}>
+                      <Text style={{ color: C.text2, fontSize: 10, fontWeight: '700', letterSpacing: 1 }}>DCR CERTIFICATE / DOCUMENT (FILES)</Text>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        {project.dcr && (
+                          <TouchableOpacity
+                            onPress={() => Linking.openURL(project.dcr.startsWith('http') ? project.dcr : `${API_URL.replace('/api', '')}${project.dcr}`)}
+                            style={{ flex: 1, backgroundColor: C.purple + '20', borderWidth: 1, borderColor: C.purple, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
+                          >
+                            <Text style={{ color: C.purple, fontSize: 11, fontWeight: '800' }}>View / Download DCR</Text>
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                          onPress={() => uploadProjectDoc('dcr', 'DCR Document')}
+                          style={{ flex: 1, backgroundColor: C.card, borderWidth: 1, borderColor: project.dcr ? C.gold : C.borderHi, borderStyle: project.dcr ? 'solid' : 'dashed', borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
+                        >
+                          <Text style={{ color: project.dcr ? C.gold : C.text, fontSize: 11, fontWeight: '700' }}>
+                            {project.dcr ? '🔄 Replace DCR (Files)' : '📁 Upload DCR (Files)'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   )}
                 </View>
@@ -944,6 +999,108 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
                     >
                       <Text style={{ color: C.text, fontSize: 12, fontWeight: '700' }}>
                         {project.site_photo ? '🔄 Replace' : '📷 Upload Photo'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Installation Photo 1 */}
+                <View style={{ backgroundColor: C.card, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: project.inst_photo_1 ? C.gold + '40' : C.border }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                    <Ionicons name="images" size={24} color={C.gold} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: C.gold, fontSize: 14, fontWeight: '700' }}>Installation Photo 1</Text>
+                      <Text style={{ color: C.text2, fontSize: 11 }}>{project.inst_photo_1 ? 'Installation photo 1 attached' : 'Not uploaded yet'}</Text>
+                    </View>
+                    <View style={{ backgroundColor: project.inst_photo_1 ? C.gold + '25' : C.text3 + '20', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
+                      <Text style={{ color: project.inst_photo_1 ? C.gold : C.text2, fontSize: 10, fontWeight: '800' }}>
+                        {project.inst_photo_1 ? 'ATTACHED ✓' : 'PENDING'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {project.inst_photo_1 && (
+                      <TouchableOpacity
+                        onPress={() => Linking.openURL(project.inst_photo_1.startsWith('http') ? project.inst_photo_1 : `${API_URL.replace('/api', '')}${project.inst_photo_1}`)}
+                        style={{ flex: 1, backgroundColor: C.gold + '20', borderWidth: 1, borderColor: C.gold, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
+                      >
+                        <Text style={{ color: C.gold, fontSize: 12, fontWeight: '800' }}>View / Download</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      onPress={() => uploadProjectDoc('inst_photo_1', 'Installation Photo 1')}
+                      style={{ flex: 1, backgroundColor: C.card2, borderWidth: 1, borderColor: C.borderHi, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
+                    >
+                      <Text style={{ color: C.text, fontSize: 12, fontWeight: '700' }}>
+                        {project.inst_photo_1 ? '🔄 Replace' : '📷 Upload Photo 1'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Installation Photo 2 */}
+                <View style={{ backgroundColor: C.card, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: project.inst_photo_2 ? C.gold + '40' : C.border }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                    <Ionicons name="images" size={24} color={C.gold} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: C.gold, fontSize: 14, fontWeight: '700' }}>Installation Photo 2</Text>
+                      <Text style={{ color: C.text2, fontSize: 11 }}>{project.inst_photo_2 ? 'Installation photo 2 attached' : 'Not uploaded yet'}</Text>
+                    </View>
+                    <View style={{ backgroundColor: project.inst_photo_2 ? C.gold + '25' : C.text3 + '20', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
+                      <Text style={{ color: project.inst_photo_2 ? C.gold : C.text2, fontSize: 10, fontWeight: '800' }}>
+                        {project.inst_photo_2 ? 'ATTACHED ✓' : 'PENDING'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {project.inst_photo_2 && (
+                      <TouchableOpacity
+                        onPress={() => Linking.openURL(project.inst_photo_2.startsWith('http') ? project.inst_photo_2 : `${API_URL.replace('/api', '')}${project.inst_photo_2}`)}
+                        style={{ flex: 1, backgroundColor: C.gold + '20', borderWidth: 1, borderColor: C.gold, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
+                      >
+                        <Text style={{ color: C.gold, fontSize: 12, fontWeight: '800' }}>View / Download</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      onPress={() => uploadProjectDoc('inst_photo_2', 'Installation Photo 2')}
+                      style={{ flex: 1, backgroundColor: C.card2, borderWidth: 1, borderColor: C.borderHi, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
+                    >
+                      <Text style={{ color: C.text, fontSize: 12, fontWeight: '700' }}>
+                        {project.inst_photo_2 ? '🔄 Replace' : '📷 Upload Photo 2'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* DCR Certificate / Document */}
+                <View style={{ backgroundColor: C.card, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: project.dcr ? C.purple + '40' : C.border }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                    <Ionicons name="folder-open" size={24} color={C.purple} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: C.purple, fontSize: 14, fontWeight: '700' }}>DCR Document / Certificate</Text>
+                      <Text style={{ color: C.text2, fontSize: 11 }}>{project.dcr ? 'DCR certificate attached' : 'Not uploaded yet'}</Text>
+                    </View>
+                    <View style={{ backgroundColor: project.dcr ? C.purple + '25' : C.text3 + '20', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
+                      <Text style={{ color: project.dcr ? C.purple : C.text2, fontSize: 10, fontWeight: '800' }}>
+                        {project.dcr ? 'ATTACHED ✓' : 'PENDING'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {project.dcr && (
+                      <TouchableOpacity
+                        onPress={() => Linking.openURL(project.dcr.startsWith('http') ? project.dcr : `${API_URL.replace('/api', '')}${project.dcr}`)}
+                        style={{ flex: 1, backgroundColor: C.purple + '20', borderWidth: 1, borderColor: C.purple, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
+                      >
+                        <Text style={{ color: C.purple, fontSize: 12, fontWeight: '800' }}>View / Download DCR</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      onPress={() => uploadProjectDoc('dcr', 'DCR Document')}
+                      style={{ flex: 1, backgroundColor: C.card2, borderWidth: 1, borderColor: C.borderHi, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
+                    >
+                      <Text style={{ color: C.text, fontSize: 12, fontWeight: '700' }}>
+                        {project.dcr ? '🔄 Replace DCR' : '📁 Upload DCR (Files)'}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -1094,9 +1251,18 @@ function NewProjectModal({ visible, onClose, onSuccess }: { visible: boolean; on
     setLoading(true);
     try {
       let site_photo = null, agreement = null, quotation = null;
-      if (data.site_photo) site_photo = await uploadFile(data.site_photo, 'site_photo.jpg');
-      if (data.agreement) agreement = await uploadFile(data.agreement, 'agreement.pdf');
-      if (data.quotation) quotation = await uploadFile(data.quotation, 'quotation.pdf');
+      if (data.site_photo) {
+        site_photo = await uploadFile(data.site_photo, 'site_photo.jpg');
+        if (!site_photo) throw new Error('Failed to upload Site Photo to server. Please try again.');
+      }
+      if (data.agreement) {
+        agreement = await uploadFile(data.agreement, 'agreement.pdf');
+        if (!agreement) throw new Error('Failed to upload Agreement PDF to server. Please try again.');
+      }
+      if (data.quotation) {
+        quotation = await uploadFile(data.quotation, 'quotation.pdf');
+        if (!quotation) throw new Error('Failed to upload Quotation PDF to server. Please try again.');
+      }
 
       const userId = await AsyncStorage.getItem('ramsun_user_id').catch(() => null);
 

@@ -603,15 +603,13 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
             <div className="flex gap-1.5 flex-shrink-0">
               <button
                 onClick={() => onOpenTransfer && onOpenTransfer(project)}
-                className="text-amber-300 hover:text-white bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/40 rounded-xl px-2.5 py-2 transition-colors text-xs font-bold flex items-center gap-1 whitespace-nowrap cursor-pointer shadow-sm"
+                className="text-amber-300 hover:text-white bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/40 rounded-xl px-2.5 py-2 transition-colors text-xs font-bold whitespace-nowrap cursor-pointer shadow-sm"
                 title="Transfer project to any department / worker (1 to 10)"
               >
-                <span>🔄</span>
-                <span>Transfer</span>
+                Transfer
               </button>
-              <button onClick={() => setMode(mode === 'steps' ? 'edit' : 'steps')} className="text-slate-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-xl px-2.5 py-2 transition-colors text-xs font-bold flex items-center gap-1 whitespace-nowrap cursor-pointer">
-                <span>{mode === 'steps' ? '✏️' : '📋'}</span>
-                <span>{mode === 'steps' ? 'Edit Info' : 'Steps'}</span>
+              <button onClick={() => setMode(mode === 'steps' ? 'edit' : 'steps')} className="text-slate-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-xl px-2.5 py-2 transition-colors text-xs font-bold whitespace-nowrap cursor-pointer">
+                {mode === 'steps' ? 'Edit Info' : 'Steps'}
               </button>
               <button onClick={onClose} className="text-slate-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-xl p-2 transition-colors flex-shrink-0 cursor-pointer">
                 <Icons.X />
@@ -842,175 +840,90 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
               })}
             </div>
 
-            {/* Dedicated Worker Document Uploads: Quotation + Sign & Agreement */}
-            <div className="px-5 pt-3 space-y-3">
+            {/* Client Uploaded Documents & Verification (Strictly Download & View) */}
+            <div className="px-5 pt-3 pb-3 space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-black tracking-wider uppercase text-slate-700 flex items-center gap-1.5">
-                  <span>📄</span> Worker Documents & Signatures
+                <p className="text-xs font-black tracking-wider uppercase text-slate-700">
+                  Client Documents & Files
                 </p>
-                <span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded-full">
-                  Step 2 & 3 Handled by Dedicated Workers
+                <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-2.5 py-0.5 rounded-full">
+                  Verification & Download Queue
                 </span>
               </div>
 
-              {/* Step 2: Quotation + Sign Card */}
-              <div className={`p-4 rounded-2xl border-2 transition-all ${
-                cur === 2 || currentPath === '/quotation'
-                  ? 'border-yellow-400 bg-yellow-50/70 shadow-sm'
-                  : 'border-slate-200 bg-white'
-              }`}>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center text-xl shrink-0 font-bold">
-                      📋
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-bold text-slate-900">Quotation + Sign</span>
-                        {project.quotation ? (
-                          <span className="text-[10px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md">
-                            ✓ Uploaded
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {[
+                  { key: 'quotation', label: 'Quotation (+ Sign)', ext: 'quotation.pdf' },
+                  { key: 'agreement', label: 'Signed Solar Agreement', ext: 'agreement.pdf' },
+                  { key: 'site_photo', label: 'Site Photo', ext: 'site_photo.jpg' },
+                  { key: 'inst_photo_1', label: 'Installation Photo 1', ext: 'inst_photo_1.jpg' },
+                  { key: 'inst_photo_2', label: 'Installation Photo 2', ext: 'inst_photo_2.jpg' },
+                  { key: 'dcr', label: 'DCR Document / Certificate', ext: 'dcr.pdf' },
+                ].map((doc) => {
+                  const docPath = (project as any)[doc.key];
+                  const hasFile = Boolean(docPath);
+                  const fullUrl = hasFile ? getUploadUrl(docPath) : '';
+                  return (
+                    <div key={doc.key} className={`p-3.5 rounded-2xl border transition-all ${hasFile ? 'bg-slate-50 border-slate-200' : 'bg-slate-50/40 border-dashed border-slate-200'}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-slate-900">{doc.label}</span>
+                        {hasFile ? (
+                          <span className="text-[10px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">
+                            Uploaded
                           </span>
                         ) : (
-                          <span className="text-[10px] font-black bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md">
-                            ⚠️ Pending Upload
+                          <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
+                            Pending
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        Quotation worker uploads and checks signed quotation document
-                      </p>
+                      {hasFile ? (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => downloadFile(fullUrl, `${doc.key}_#${project.client_id || project.id}_${doc.ext}`)}
+                            className="flex-1 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold py-2 px-3 rounded-xl transition-all active:scale-95 cursor-pointer text-center"
+                          >
+                            Download
+                          </button>
+                          <a
+                            href={fullUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold py-2 px-3 rounded-xl transition-all active:scale-95 cursor-pointer text-center"
+                          >
+                            View
+                          </a>
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-slate-400 italic">Not uploaded yet by client</p>
+                      )}
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                    {project.quotation && (
-                      <DownloadBtn url={getUploadUrl(project.quotation)} name="quotation" label="👁️ View Quotation" />
-                    )}
-                    <label className={`cursor-pointer text-xs font-black px-3.5 py-2 rounded-xl transition-all shadow-sm flex items-center gap-1.5 ${
-                      uploadingDoc === 'quotation'
-                        ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
-                        : 'bg-yellow-400 hover:bg-yellow-500 text-slate-950 active:scale-95'
-                    }`}>
-                      <span>{uploadingDoc === 'quotation' ? '↻ Uploading...' : project.quotation ? '📤 Replace Quotation' : '📤 Upload Quotation + Sign'}</span>
-                      <input
-                        type="file"
-                        accept=".pdf,image/*"
-                        className="hidden"
-                        disabled={uploadingDoc === 'quotation'}
-                        onChange={e => {
-                          if (e.target.files && e.target.files[0]) {
-                            handleDocUpload('quotation', e.target.files[0]);
-                          }
-                        }}
-                      />
-                    </label>
-                  </div>
-                </div>
+                  );
+                })}
               </div>
 
-              {/* Step 3: Signed Agreement Card */}
-              <div className={`p-4 rounded-2xl border-2 transition-all ${
-                cur === 3 || currentPath === '/agreement'
-                  ? 'border-emerald-400 bg-emerald-50/70 shadow-sm'
-                  : 'border-slate-200 bg-white'
-              }`}>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-xl shrink-0 font-bold">
-                      📄
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-bold text-slate-900">Signed Agreement</span>
-                        {project.agreement ? (
-                          <span className="text-[10px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md">
-                            ✓ Uploaded
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-black bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md">
-                            ⚠️ Pending Upload
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        Agreement worker uploads and checks signed client agreement
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                    {project.agreement && (
-                      <DownloadBtn url={getUploadUrl(project.agreement)} name="agreement" label="👁️ View Agreement" />
-                    )}
-                    <label className={`cursor-pointer text-xs font-black px-3.5 py-2 rounded-xl transition-all shadow-sm flex items-center gap-1.5 ${
-                      uploadingDoc === 'agreement'
-                        ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
-                        : 'bg-emerald-500 hover:bg-emerald-600 text-white active:scale-95'
-                    }`}>
-                      <span>{uploadingDoc === 'agreement' ? '↻ Uploading...' : project.agreement ? '📤 Replace Agreement' : '📤 Upload Agreement'}</span>
-                      <input
-                        type="file"
-                        accept=".pdf,image/*"
-                        className="hidden"
-                        disabled={uploadingDoc === 'agreement'}
-                        onChange={e => {
-                          if (e.target.files && e.target.files[0]) {
-                            handleDocUpload('agreement', e.target.files[0]);
-                          }
-                        }}
-                      />
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Other Files section */}
-            <div className="px-5 pb-3 mt-4">
-              <p className="text-xs font-bold tracking-widest uppercase mb-3" style={{color:'#F0A500'}}>📁 All Uploaded Files</p>
-              
-              {!(project.site_photo || project.agreement || project.quotation || project.inst_photo_1 || project.inst_photo_2) && (
-                <p className="text-xs text-slate-500 mb-4 italic">No documents uploaded yet.</p>
-              )}
-
-              <div className="flex flex-wrap gap-2 mb-4">
-                {project.site_photo && (
-                  <DownloadBtn url={getUploadUrl(project.site_photo)} name="site_photo" label="📷 Site Photo" />
-                )}
-                {project.agreement && (
-                  <DownloadBtn url={getUploadUrl(project.agreement)} name="agreement" label="📄 Agreement" />
-                )}
-                {project.quotation && (
-                  <DownloadBtn url={getUploadUrl(project.quotation)} name="quotation" label="📋 Quotation" />
-                )}
-                {project.inst_photo_1 && (
-                  <DownloadBtn url={getUploadUrl(project.inst_photo_1)} name="inst_photo_1" label="📷 Inst. Photo 1" />
-                )}
-                {project.inst_photo_2 && (
-                  <DownloadBtn url={getUploadUrl(project.inst_photo_2)} name="inst_photo_2" label="📷 Inst. Photo 2" />
-                )}
-              </div>
-
-              <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+              {/* Document Rejection section */}
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-3.5 mt-2">
                 <p className="text-xs font-bold text-red-600 mb-2">Reject a Document</p>
-                <div className="flex gap-2">
-                  <select value={rejectDoc} onChange={e => setRejectDoc(e.target.value)} className="text-xs border border-red-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 outline-none">
+                <div className="flex gap-2 flex-col sm:flex-row">
+                  <select value={rejectDoc} onChange={e => setRejectDoc(e.target.value)} className="text-xs border border-red-200 rounded-xl px-2.5 py-2 bg-white text-slate-700 outline-none">
                     <option value="">Select Document</option>
-                    <option value="site_photo">Site Photo</option>
-                    <option value="agreement">Agreement</option>
                     <option value="quotation">Quotation</option>
-                    <option value="inst_photo_1">Inst. Photo 1</option>
-                    <option value="inst_photo_2">Inst. Photo 2</option>
+                    <option value="agreement">Agreement</option>
+                    <option value="site_photo">Site Photo</option>
+                    <option value="inst_photo_1">Installation Photo 1</option>
+                    <option value="inst_photo_2">Installation Photo 2</option>
+                    <option value="dcr">DCR Document</option>
                   </select>
-                  <input type="text" placeholder="Reason..." value={rejectReason} onChange={e => setRejectReason(e.target.value)} className="flex-1 text-xs border border-red-200 rounded-lg px-2 py-1.5 bg-white outline-none" />
-                  <button onClick={handleReject} disabled={busy || !rejectDoc || !rejectReason} className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+                  <input type="text" placeholder="Reason for rejection..." value={rejectReason} onChange={e => setRejectReason(e.target.value)} className="flex-1 text-xs border border-red-200 rounded-xl px-3 py-2 bg-white outline-none" />
+                  <button onClick={handleReject} disabled={busy || !rejectDoc || !rejectReason} className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors disabled:opacity-50 cursor-pointer">
                     Reject
                   </button>
                 </div>
                 {project.failed_document && (
-                  <p className="mt-2 text-xs text-red-600 bg-red-100 px-2 py-1 rounded">
-                    ⚠️ Current Rejection: {project.failed_document} - {project.rejection_reason}
+                  <p className="mt-2 text-xs text-red-600 bg-red-100 px-2.5 py-1 rounded-lg">
+                    Current Rejection: {project.failed_document} - {project.rejection_reason}
                   </p>
                 )}
               </div>
@@ -1034,14 +947,14 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
                   disabled={busy}
                   className="w-full bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 text-white font-bold text-sm py-3 rounded-xl transition-all shadow-md hover:shadow-emerald-200 flex items-center justify-center gap-2"
                 >
-                  {busy ? '⏳ Processing...' : '🏦 APPROVE LOAN (Admin)'}
+                  {busy ? 'Processing...' : 'APPROVE LOAN (Admin)'}
                 </button>
               </div>
             )}
             {project.loan_approved && (
               <div className="px-5 pb-3">
                 <div className="w-full bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-sm py-3 rounded-xl flex items-center justify-center gap-2">
-                  ✅ Loan Already Approved
+                  Loan Already Approved
                 </div>
               </div>
             )}
@@ -1094,9 +1007,9 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
                 setBusy(false);
                 setMode('steps');
               }}
-              className="w-full bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-bold text-sm py-3 rounded-xl transition-colors shadow-md hover:shadow-yellow-200 flex items-center justify-center gap-2"
+              className="w-full bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-bold text-sm py-3 rounded-xl transition-colors shadow-md hover:shadow-yellow-200 flex items-center justify-center gap-2 cursor-pointer"
             >
-              {busy ? '⏳ Saving...' : '💾 Save Changes'}
+              {busy ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         )}
@@ -1113,8 +1026,7 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
                 className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs sm:text-sm px-3.5 py-2.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
                 title="Download client dossier, all images and PDFs as ZIP"
               >
-                <span>📦</span>
-                <span>Download Client ZIP</span>
+                Download Client ZIP
               </button>
             )}
             {(!currentUser || currentUser.role === 'admin') && (
@@ -1130,8 +1042,7 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
                 }} 
                 className="bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs sm:text-sm px-3.5 sm:px-5 py-2.5 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
               >
-                <span>🗑️</span>
-                <span>Delete</span>
+                Delete
               </button>
             )}
           </div>
@@ -1325,8 +1236,7 @@ function Dashboard({ user }: { user?: any }) {
                   to="/users"
                   className="px-3.5 py-2.5 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-500 hover:to-amber-600 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all whitespace-nowrap"
                 >
-                  <span>🔑</span>
-                  <span>Access Codes</span>
+                  Access Codes
                 </Link>
               )}
               <button
@@ -1335,8 +1245,7 @@ function Dashboard({ user }: { user?: any }) {
                 title="Download all projects in an Excel CSV file"
                 className="px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
               >
-                <span>📊</span>
-                <span>Export Excel</span>
+                Export Excel
               </button>
               <button
                 type="button"
@@ -1344,8 +1253,7 @@ function Dashboard({ user }: { user?: any }) {
                 title="Download full ZIP containing a folder for each client with info, documents, and photos"
                 className="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
               >
-                <span>📦</span>
-                <span>Download All ZIP</span>
+                Download All ZIP
               </button>
             </div>
           )}
@@ -1433,7 +1341,7 @@ function Dashboard({ user }: { user?: any }) {
                         title="Download Client ZIP Dossier"
                         className="flex items-center gap-1 text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 px-2.5 py-2 rounded-xl transition-all active:scale-95 cursor-pointer"
                       >
-                        <span>📦</span>
+                        ZIP
                       </button>
                       {(!user || user.role === 'admin') && (
                         <button
@@ -1446,14 +1354,14 @@ function Dashboard({ user }: { user?: any }) {
                           title="Delete Project (Admin only)"
                           className="flex items-center gap-1 text-xs font-bold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 px-2 py-2 rounded-xl transition-all active:scale-95 cursor-pointer"
                         >
-                          <span>🗑️</span>
+                          Delete
                         </button>
                       )}
                       <button
                         onClick={() => setTransferTarget({ project: p })}
                         className="flex items-center gap-1 text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300/80 hover:bg-amber-100 px-2.5 py-2 rounded-xl transition-all active:scale-95 cursor-pointer"
                       >
-                        <span>🔄</span> Transfer
+                        Transfer
                       </button>
                       <button
                         onClick={() => setSelected(p)}
@@ -1466,7 +1374,7 @@ function Dashboard({ user }: { user?: any }) {
 
                   {p.transfer_remarks && (
                     <div className="mb-2.5 p-2 bg-amber-50/90 border border-amber-200/80 rounded-xl text-[11px] text-amber-900 flex items-start gap-1.5">
-                      <span className="text-xs shrink-0">🔄</span>
+                      <span className="text-xs shrink-0 font-bold">Transfer:</span>
                       <div className="truncate flex-1">
                         <strong className="text-amber-800">Transferred (Step {p.previous_step || '?'}):</strong> {p.transfer_remarks}
                       </div>
@@ -1584,8 +1492,7 @@ function Dashboard({ user }: { user?: any }) {
                             title="Transfer project to any department / worker (1 to 10)"
                             className="flex items-center gap-1 text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 px-3 py-2 rounded-xl transition-all active:scale-95 whitespace-nowrap cursor-pointer shadow-sm"
                           >
-                            <span>🔄</span>
-                            <span>Transfer</span>
+                            Transfer
                           </button>
                           <button
                             type="button"
@@ -1593,7 +1500,7 @@ function Dashboard({ user }: { user?: any }) {
                             title="Download client dossier ZIP (info + all images/PDFs)"
                             className="flex items-center gap-1 text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2.5 py-2 rounded-xl transition-all active:scale-95 whitespace-nowrap cursor-pointer shadow-sm"
                           >
-                            <span>📦 ZIP</span>
+                            ZIP
                           </button>
                           {(!user || user.role === 'admin') && (
                             <button
@@ -1606,7 +1513,7 @@ function Dashboard({ user }: { user?: any }) {
                               title="Delete Project (Admin only)"
                               className="flex items-center gap-1 text-xs font-bold bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-2.5 py-2 rounded-xl transition-all active:scale-95 whitespace-nowrap cursor-pointer shadow-sm"
                             >
-                              <span>🗑️</span>
+                              Delete
                             </button>
                           )}
                         </div>

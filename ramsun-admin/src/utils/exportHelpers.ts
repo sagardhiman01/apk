@@ -27,6 +27,7 @@ export interface ProjectData {
   quotation?: string;
   inst_photo_1?: string;
   inst_photo_2?: string;
+  dcr?: string;
 }
 
 const triggerBlobDownload = (blob: Blob, filename: string) => {
@@ -105,6 +106,7 @@ export const exportProjectsToExcel = (projects: ProjectData[]) => {
     escapeCsv(p.site_photo || ''),
     escapeCsv(p.inst_photo_1 || ''),
     escapeCsv(p.inst_photo_2 || ''),
+    escapeCsv(p.dcr || ''),
   ]);
 
   const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
@@ -143,13 +145,18 @@ export const generateClientInfoText = (p: ProjectData) => {
     `- Site Photo:     ${p.site_photo ? 'Attached' : 'Not Uploaded'}`,
     `- Inst Photo 1:   ${p.inst_photo_1 ? 'Attached' : 'Not Uploaded'}`,
     `- Inst Photo 2:   ${p.inst_photo_2 ? 'Attached' : 'Not Uploaded'}`,
+    `- DCR Document:   ${p.dcr ? 'Attached' : 'Not Uploaded'}`,
     '======================================================',
   ].join('\r\n');
 };
 
 const fetchFileBlob = async (url: string): Promise<Blob | null> => {
   try {
-    const res = await fetch(url);
+    let resolvedUrl = url;
+    if (resolvedUrl.startsWith('/') && typeof window !== 'undefined' && window.location?.origin) {
+      resolvedUrl = `${window.location.origin}${resolvedUrl}`;
+    }
+    const res = await fetch(resolvedUrl, { cache: 'no-store' });
     if (!res.ok) return null;
     return await res.blob();
   } catch {
@@ -176,6 +183,7 @@ export const downloadSingleClientZip = async (
     { key: 'site_photo', label: 'Site_Photo', fallbackExt: '.jpg' },
     { key: 'inst_photo_1', label: 'Installation_Photo_1', fallbackExt: '.jpg' },
     { key: 'inst_photo_2', label: 'Installation_Photo_2', fallbackExt: '.jpg' },
+    { key: 'dcr', label: 'DCR_Document', fallbackExt: '.pdf' },
   ];
 
   for (const doc of docList) {
@@ -223,6 +231,12 @@ export const downloadAllProjectsZip = async (
     'Transfer Remarks',
     'Transferred By',
     'Created At',
+    'Quotation',
+    'Agreement',
+    'Site Photo',
+    'Inst Photo 1',
+    'Inst Photo 2',
+    'DCR Document',
   ];
   const escapeCsv = (val: any) => `"${String(val || '').replace(/"/g, '""')}"`;
   const csvRows = projects.map(p => [
@@ -243,6 +257,12 @@ export const downloadAllProjectsZip = async (
     escapeCsv(p.transfer_remarks || ''),
     escapeCsv(p.transferred_by || ''),
     escapeCsv(p.created_at || ''),
+    escapeCsv(p.quotation || ''),
+    escapeCsv(p.agreement || ''),
+    escapeCsv(p.site_photo || ''),
+    escapeCsv(p.inst_photo_1 || ''),
+    escapeCsv(p.inst_photo_2 || ''),
+    escapeCsv(p.dcr || ''),
   ].join(','));
   const csvText = '\uFEFF' + [headers.join(','), ...csvRows].join('\r\n');
   zip.file('00_All_Projects_Summary.csv', csvText);
@@ -264,6 +284,7 @@ export const downloadAllProjectsZip = async (
         { key: 'site_photo', label: 'Site_Photo', fallbackExt: '.jpg' },
         { key: 'inst_photo_1', label: 'Installation_Photo_1', fallbackExt: '.jpg' },
         { key: 'inst_photo_2', label: 'Installation_Photo_2', fallbackExt: '.jpg' },
+        { key: 'dcr', label: 'DCR_Document', fallbackExt: '.pdf' },
       ];
 
       for (const doc of docList) {

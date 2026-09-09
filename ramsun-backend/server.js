@@ -36,20 +36,35 @@ const authLimiter = rateLimit({
 
 // Auto-create uploads folder if missing
 const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+try {
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+} catch (e) {
+  console.error('Error ensuring uploads directory:', e);
+}
 
 app.use('/uploads', express.static(uploadsDir));
 
 // Multer Setup for File Uploads
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'uploads/');
+    try {
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+    } catch (e) { /* ignore */ }
+    cb(null, uploadsDir);
   },
   filename: function (req, file, cb) {
-    cb(null, Date.now() + '-' + file.originalname);
+    const cleanName = (file.originalname || 'document').replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `${Date.now()}-${cleanName}`);
   }
 });
-const upload = multer({ storage: storage });
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 30 * 1024 * 1024 } // 30MB
+});
 
 // MySQL Connection Setup - lazy init so server starts even without DB
 let pool = null;
@@ -124,6 +139,15 @@ async function initializeDatabase(dbPool) {
     } catch(e) { /* already exists */ }
     try {
       await dbPool.query('ALTER TABLE projects ADD COLUMN needs_upcl BOOLEAN DEFAULT FALSE');
+    } catch(e) { /* already exists */ }
+    try {
+      await dbPool.query('ALTER TABLE projects ADD COLUMN inst_photo_1 VARCHAR(255)');
+    } catch(e) { /* already exists */ }
+    try {
+      await dbPool.query('ALTER TABLE projects ADD COLUMN inst_photo_2 VARCHAR(255)');
+    } catch(e) { /* already exists */ }
+    try {
+      await dbPool.query('ALTER TABLE projects ADD COLUMN dcr VARCHAR(255)');
     } catch(e) { /* already exists */ }
 
     // Create project_transfers table for complete transfer audit trail
@@ -422,12 +446,18 @@ app.post('/api/projects', async (req, res) => {
   }
 });
 
-// Upload Endpoint
-app.post('/api/upload', upload.single('file'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ success: false, error: 'No file uploaded' });
-  }
-  res.json({ success: true, filePath: `/uploads/${req.file.filename}` });
+// Upload Endpoint with detailed error catching
+app.post('/api/upload', (req, res) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      console.error('Upload error in multer:', err);
+      return res.status(500).json({ success: false, error: err.message || 'File upload failed' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No file received' });
+    }
+    res.json({ success: true, filePath: `/uploads/${req.file.filename}` });
+  });
 });
 
 app.put('/api/projects/:id/step', async (req, res) => {
@@ -576,7 +606,7 @@ app.put('/api/projects/:id/document', async (req, res) => {
     const setClauses = [];
     const values = [];
     
-    const allowed = ['site_photo', 'agreement', 'quotation', 'inst_photo_1', 'inst_photo_2', 'failed_document', 'rejection_reason', 'needs_upcl'];
+    const allowed = ['site_photo', 'agreement', 'quotation', 'inst_photo_1', 'inst_photo_2', 'dcr', 'failed_document', 'rejection_reason', 'needs_upcl'];
     for (const key of Object.keys(updates)) {
       if (allowed.includes(key)) {
         setClauses.push(`${key} = ?`);
