@@ -293,19 +293,172 @@ function UPCLWaiting({ project, onClose }: { project: any; onClose: () => void }
   );
 }
 
+// ─── TRANSFER PROJECT MODAL (Worker to Worker / Step 1-10 + UPCL) ─────────────
+function TransferProjectModal({
+  project,
+  role,
+  visible,
+  onClose,
+  onSuccess,
+  defaultTarget,
+}: {
+  project: any;
+  role: string;
+  visible: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+  defaultTarget?: number | 'upcl';
+}) {
+  const [selectedTarget, setSelectedTarget] = useState<number | 'upcl'>(defaultTarget ?? 1);
+  const [reason, setReason] = useState('');
+  const [workerName, setWorkerName] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (defaultTarget !== undefined) setSelectedTarget(defaultTarget);
+  }, [defaultTarget, visible]);
+
+  const targets: Array<{ id: number | 'upcl'; isUpcl: boolean; label: string; desc: string; status: string }> = [
+    { id: 1, isUpcl: false, label: 'Step 1: Registration', desc: 'Files login & customer details verification', status: 'Registration' },
+    { id: 'upcl', isUpcl: true, label: '🏛️ UPCL Department', desc: 'Electricity bill / connection / meter discrepancy', status: 'Step 1 - UPCL Verification (Bill Issue)' },
+    { id: 2, isUpcl: false, label: 'Step 2: Quotation + Sign', desc: 'Quotation upload & sign verification', status: 'Quotation + Sign' },
+    { id: 3, isUpcl: false, label: 'Step 3: Agreement', desc: 'Signed solar contract agreement', status: 'Agreement' },
+    { id: 4, isUpcl: false, label: 'Step 4: Loan Apply', desc: 'Bank loan application submitted', status: 'Loan Apply' },
+    { id: 5, isUpcl: false, label: 'Step 5: 1st Disbursed', desc: 'First loan amount disbursed', status: 'Loan Disbursed' },
+    { id: 6, isUpcl: false, label: 'Step 6: Material Dispatch', desc: 'Materials dispatched to site', status: 'Material Dispatch' },
+    { id: 7, isUpcl: false, label: 'Step 7: Installation', desc: 'Panels & inverter with Geotag', status: 'Installation' },
+    { id: 8, isUpcl: false, label: 'Step 8: 2nd Disbursed', desc: 'Second loan amount disbursed', status: 'Second Disbursed' },
+    { id: 9, isUpcl: false, label: 'Step 9: Upload Inst.', desc: 'Upload installation with DCR', status: 'Upload Inst.' },
+    { id: 10, isUpcl: false, label: 'Step 10: Subsidy Redeem', desc: 'Subsidy claimed & redeemed', status: 'Subsidy Redeem' },
+  ];
+
+  const handleTransfer = async () => {
+    if (!reason.trim()) {
+      Alert.alert('Reason Required', 'Please enter a note / reason for this transfer.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const targetObj = targets.find(t => t.id === selectedTarget) || targets[0];
+      const targetStep = targetObj.isUpcl ? 1 : (targetObj.id as number);
+
+      const res = await fetch(`${API_URL}/projects/${project.id}/transfer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target_step: targetStep,
+          status: targetObj.status,
+          reason: reason.trim(),
+          transferred_by: workerName.trim() || role || 'Worker',
+          is_upcl: targetObj.isUpcl,
+        }),
+      });
+
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || 'Failed to transfer project');
+      }
+
+      Alert.alert('Transferred', `Project #${project.client_id || project.id} transferred to ${targetObj.label}.`);
+      setReason('');
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      Alert.alert('Transfer Error', err.message || 'Could not transfer project.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!visible) return null;
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' }}>
+        <View style={{ backgroundColor: C.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '92%', borderWidth: 1, borderColor: C.border, padding: 20 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <View>
+              <Text style={{ color: C.gold, fontSize: 11, fontWeight: '800', letterSpacing: 1.5 }}>WORKER-TO-WORKER TRANSFER</Text>
+              <Text style={{ color: C.text, fontSize: 19, fontWeight: '900' }}>Project #{project.client_id || project.id}</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={{ width: 34, height: 34, borderRadius: 12, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ color: C.text2, fontSize: 16 }}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
+            <Text style={{ color: C.text2, fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 8 }}>SEND TO DEPARTMENT / STEP</Text>
+            <View style={{ gap: 8, marginBottom: 16 }}>
+              {targets.map(t => {
+                const isSelected = selectedTarget === t.id;
+                const activeColor = t.isUpcl ? C.blue : C.gold;
+                return (
+                  <TouchableOpacity
+                    key={String(t.id)}
+                    onPress={() => setSelectedTarget(t.id)}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 14,
+                      backgroundColor: isSelected ? activeColor + '20' : C.card,
+                      borderWidth: 1.5,
+                      borderColor: isSelected ? activeColor : C.border,
+                    }}
+                  >
+                    <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: isSelected ? activeColor : C.text3, alignItems: 'center', justifyContent: 'center' }}>
+                      {isSelected && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: activeColor }} />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: isSelected ? activeColor : C.text, fontSize: 13, fontWeight: '700' }}>{t.label}</Text>
+                      <Text style={{ color: C.text2, fontSize: 11, marginTop: 1 }}>{t.desc}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={{ color: C.text2, fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 6 }}>REASON / REMARK *</Text>
+            <TextInput
+              placeholder="e.g., Electricity bill mismatch / quotation signed / re-check details"
+              placeholderTextColor={C.text3}
+              value={reason}
+              onChangeText={setReason}
+              style={{ backgroundColor: C.bg2, color: C.text, borderRadius: 12, borderWidth: 1, borderColor: C.border, padding: 12, fontSize: 13, marginBottom: 14 }}
+            />
+
+            <Text style={{ color: C.text2, fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 6 }}>YOUR NAME / WORKER ID</Text>
+            <TextInput
+              placeholder="e.g., Registration Worker"
+              placeholderTextColor={C.text3}
+              value={workerName}
+              onChangeText={setWorkerName}
+              style={{ backgroundColor: C.bg2, color: C.text, borderRadius: 12, borderWidth: 1, borderColor: C.border, padding: 12, fontSize: 13, marginBottom: 20 }}
+            />
+
+            <PrimaryBtn label={loading ? 'Transferring...' : 'Confirm Transfer ✓'} onPress={handleTransfer} loading={loading} />
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 // ─── PROJECT DETAIL MODAL ─────────────────────────────────────────────────────
-function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
+function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onRefresh }: {
   project: any; role: string; visible: boolean; onClose: () => void;
   onUpdateStep: (id: number, step: number, status: string) => Promise<void>;
+  onRefresh?: () => Promise<void>;
 }) {
-  const currentStep = project?.step ?? 0;
+  const currentStep = project?.step ?? 1;
   const isUPCL = Boolean(
     (project?.status && (project.status.includes('UPCL') || project.status.toLowerCase().includes('upcl'))) ||
     project?.needs_upcl ||
     (project?.transfer_remarks && project.transfer_remarks.toLowerCase().includes('upcl')) ||
     project?.transferred_by === 'upcl'
   );
+  const canManage = role === 'admin' || role === 'worker' || role?.startsWith('bo_') || role === 'bank' || role === 'store' || role === 'installation';
+
   const [showUPCLModal, setShowUPCLModal] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferDefaultTarget, setTransferDefaultTarget] = useState<number | 'upcl' | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [reminderMsg, setReminderMsg] = useState('');
   const slideY = useRef(new Animated.Value(800)).current;
@@ -329,39 +482,59 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
 
   if (!project) return null;
 
-  const uploadStep8Photo = async (field: 'inst_photo_1' | 'inst_photo_2') => {
+  // Universal Document Upload for Mobile APK
+  const uploadProjectDoc = async (field: 'quotation' | 'agreement' | 'site_photo' | 'inst_photo_1' | 'inst_photo_2', label: string) => {
     try {
       setBusy(true);
-      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.7 });
-      if (!res.canceled && res.assets && res.assets.length > 0) {
-        const asset = res.assets[0];
-        const form = new FormData();
-        const fileName = asset.uri.split('/').pop() || 'photo.jpg';
-        const mimeType = fileName.endsWith('.png') ? 'image/png' : 'image/jpeg';
-        if (Platform.OS === 'web') {
-          const blobRes = await fetch(asset.uri);
-          const blob = await blobRes.blob();
-          form.append('file', blob, fileName);
-        } else {
-          form.append('file', { uri: asset.uri, name: fileName, type: mimeType } as any);
+      let asset: any = null;
+      if (field === 'site_photo' || field === 'inst_photo_1' || field === 'inst_photo_2') {
+        const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.75 });
+        if (!res.canceled && res.assets && res.assets.length > 0) {
+          asset = res.assets[0];
         }
-        const uploadRes = await fetch(`${API_URL}/upload`, { method: 'POST', body: form });
-        const json = await uploadRes.json();
-        if (json.success) {
-          const updateRes = await fetch(`${API_URL}/projects/${project.id}/document`, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ [field]: json.filePath })
-          });
-          if (updateRes.ok) {
-            Alert.alert('Success', 'Photo uploaded successfully.');
-            onClose(); // close to refresh
-          } else Alert.alert('Error', 'Failed to update document.');
-        } else {
-          Alert.alert('Error', 'Upload failed.');
+      } else {
+        const res = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'image/*'] });
+        if (!res.canceled && res.assets && res.assets.length > 0) {
+          asset = res.assets[0];
         }
       }
-    } catch (e) {
-      Alert.alert('Error', 'Something went wrong.');
+
+      if (!asset) {
+        setBusy(false);
+        return;
+      }
+
+      const form = new FormData();
+      const fileName = asset.name || asset.fileName || `${field}_doc.pdf`;
+      const mimeType = asset.mimeType || (fileName.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
+
+      if (Platform.OS === 'web') {
+        const blobRes = await fetch(asset.uri);
+        const blob = await blobRes.blob();
+        form.append('file', blob, fileName);
+      } else {
+        form.append('file', { uri: asset.uri, name: fileName, type: mimeType } as any);
+      }
+
+      const uploadRes = await fetch(`${API_URL}/upload`, { method: 'POST', body: form });
+      const json = await uploadRes.json();
+      if (json.success && json.filePath) {
+        const updateRes = await fetch(`${API_URL}/projects/${project.id}/document`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [field]: json.filePath })
+        });
+        if (updateRes.ok) {
+          Alert.alert('Success', `${label} uploaded successfully!`);
+          if (onRefresh) await onRefresh();
+        } else {
+          Alert.alert('Error', 'Failed to update project with new document.');
+        }
+      } else {
+        Alert.alert('Error', 'File upload failed. Please try again.');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Something went wrong during upload.');
     } finally {
       setBusy(false);
     }
@@ -380,9 +553,6 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
     { id: 10, icon: 'gift', label: 'Subsidy Redeem', desc: 'Subsidy claimed and redeemed' },
   ];
 
-  // Show UPCL waiting screen if loan is in process but not fully approved/installed, and we want to show a loading screen.
-  // Actually, let's just show the full modal for now so employees can see all steps.
-  // We'll remove the forced UPCLWaiting for employees so they can mark steps.
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={close}>
       <Animated.View style={{ flex: 1, backgroundColor: bg.interpolate({ inputRange: [0, 1], outputRange: ['rgba(0,0,0,0)', 'rgba(0,0,0,0.88)'] }), justifyContent: 'flex-end' }}>
@@ -391,9 +561,9 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 48 }}>
             {/* Header */}
-            <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: C.gold, fontSize: 11, fontWeight: '800', letterSpacing: 2, marginBottom: 6 }}>PROJECT #{project.id}</Text>
+                <Text style={{ color: C.gold, fontSize: 11, fontWeight: '800', letterSpacing: 2, marginBottom: 6 }}>PROJECT #{project.client_id || project.id}</Text>
                 <Text style={{ color: C.text, fontSize: 24, fontWeight: '900' }}>{project.customer_name || '—'}</Text>
                 <Text style={{ color: C.text2, fontSize: 13, marginTop: 4 }}>{project.phone}</Text>
               </View>
@@ -402,7 +572,39 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
               </TouchableOpacity>
             </View>
 
-            {/* Progress */}
+            {/* Top Quick Actions: Worker Transfer & UPCL */}
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+              <TouchableOpacity
+                onPress={() => { setTransferDefaultTarget(undefined); setShowTransferModal(true); }}
+                style={{ flex: 1, backgroundColor: C.gold + '20', borderWidth: 1.5, borderColor: C.gold, borderRadius: 14, paddingVertical: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}
+              >
+                <Ionicons name="swap-horizontal" size={18} color={C.gold} />
+                <Text style={{ color: C.gold, fontSize: 13, fontWeight: '800' }}>Transfer Project</Text>
+              </TouchableOpacity>
+
+              {isUPCL && (
+                <TouchableOpacity
+                  onPress={() => setShowUPCLModal(true)}
+                  style={{ flex: 1, backgroundColor: C.blue + '20', borderWidth: 1.5, borderColor: C.blue, borderRadius: 14, paddingVertical: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}
+                >
+                  <Text style={{ fontSize: 16 }}>🏛️</Text>
+                  <Text style={{ color: C.blue, fontSize: 13, fontWeight: '800' }}>UPCL Portal</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Transfer Remarks Audit Box */}
+            {project.transfer_remarks && (
+              <View style={{ backgroundColor: C.card2, borderRadius: 16, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: C.borderHi }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <Text style={{ color: C.gold, fontSize: 10, fontWeight: '800', letterSpacing: 1.5 }}>LATEST WORKER TRANSFER NOTE</Text>
+                  <Text style={{ color: C.text2, fontSize: 11 }}>By: {project.transferred_by || 'Worker'}</Text>
+                </View>
+                <Text style={{ color: C.text, fontSize: 13, fontWeight: '600', lineHeight: 18 }}>"{project.transfer_remarks}"</Text>
+              </View>
+            )}
+
+            {/* Progress Bar */}
             <View style={{ backgroundColor: C.card, borderRadius: 20, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: C.border }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 }}>
                 <Text style={{ color: C.text2, fontSize: 11, fontWeight: '700', letterSpacing: 1.5 }}>PROGRESS</Text>
@@ -433,23 +635,47 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
                   </View>
                 </View>
                 <Text style={{ color: C.text2, fontSize: 12, lineHeight: 18, marginBottom: 10 }}>
-                  This application has been referred to the UPCL department by the registration team to resolve a document requirement (e.g. electricity bill mismatch or connection transfer).
+                  This application was routed to UPCL to resolve an electricity bill, connection, or meter discrepancy before proceeding.
                 </Text>
-                {project.transfer_remarks && (
-                  <View style={{ backgroundColor: C.card, borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: C.border }}>
-                    <Text style={{ color: C.text3, fontSize: 10, fontWeight: '800', letterSpacing: 1 }}>WORKER REMARK</Text>
-                    <Text style={{ color: C.text, fontSize: 12, fontWeight: '600', marginTop: 4 }}>"{project.transfer_remarks}"</Text>
-                  </View>
-                )}
-                <TouchableOpacity
-                  onPress={() => setShowUPCLModal(true)}
-                  style={{ backgroundColor: C.blue, borderRadius: 14, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' }}
-                >
-                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800' }}>🌐 Open UPCL Status & Portal</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <TouchableOpacity
+                    onPress={() => setShowUPCLModal(true)}
+                    style={{ flex: 1, backgroundColor: C.blue, borderRadius: 12, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>🌐 Open UPCL Portal</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={async () => {
+                      try {
+                        setBusy(true);
+                        await fetch(`${API_URL}/projects/${project.id}/transfer`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            target_step: 1,
+                            status: 'Registration',
+                            reason: 'UPCL issue resolved by worker',
+                            transferred_by: role || 'Worker',
+                            is_upcl: false,
+                          })
+                        });
+                        Alert.alert('Resolved', 'Project sent back to standard Registration queue.');
+                        if (onRefresh) await onRefresh();
+                      } catch(e) {
+                        Alert.alert('Error', 'Failed to update UPCL status.');
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                    style={{ flex: 1, backgroundColor: C.green + '25', borderWidth: 1.5, borderColor: C.green, borderRadius: 12, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Text style={{ color: C.green, fontSize: 12, fontWeight: '800' }}>✓ Resolve UPCL</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
 
+            {/* Document Rejection Notice */}
             {project.failed_document && (
               <View style={{ backgroundColor: C.red + '20', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: C.red + '50' }}>
                 <Text style={{ color: C.red, fontSize: 14, fontWeight: '800', marginBottom: 4 }}>⚠️ Document Rejected</Text>
@@ -478,8 +704,10 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
                           method: 'PUT', headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ [project.failed_document]: json.filePath, failed_document: null, rejection_reason: null })
                         });
-                        if (updateRes.ok) { Alert.alert('Success', 'Document re-uploaded successfully.'); onClose(); }
-                        else Alert.alert('Error', 'Failed to update document.');
+                        if (updateRes.ok) {
+                          Alert.alert('Success', 'Document re-uploaded successfully.');
+                          if (onRefresh) await onRefresh();
+                        } else Alert.alert('Error', 'Failed to update document.');
                       } else {
                         Alert.alert('Error', 'Failed to upload file.');
                       }
@@ -498,9 +726,9 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
               const done = currentStep >= s.id;
               const isNext = currentStep + 1 === s.id;
               return (
-                <View key={s.id} style={{ marginBottom: 10 }}>
+                <View key={s.id} style={{ marginBottom: 12 }}>
                   <TouchableOpacity onPress={() => {
-                    if (!isNext || role !== 'admin') return;
+                    if (!isNext || !canManage) return;
                     Alert.alert('Mark Complete?', `Mark "${s.label}" as done?`, [
                       { text: 'Cancel', style: 'cancel' },
                       {
@@ -508,13 +736,14 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
                           setBusy(true);
                           try {
                             await onUpdateStep(project.id, s.id, s.label);
+                            if (onRefresh) await onRefresh();
                           } finally {
                             setBusy(false);
                           }
                         }
                       }
                     ]);
-                  }} disabled={!isNext || busy || role !== 'admin'} activeOpacity={0.75} style={{
+                  }} disabled={!isNext || busy || !canManage} activeOpacity={0.75} style={{
                     flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 18,
                     backgroundColor: done ? C.gold + '15' : isNext ? C.gold + '25' : C.card,
                     borderWidth: 1.5, borderColor: done ? C.gold + '50' : isNext ? C.gold : C.border,
@@ -527,16 +756,134 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
                       <Text style={{ color: C.text2, fontSize: 12, marginTop: 2 }}>{s.desc}</Text>
                     </View>
                     {done && <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: C.gold + '30', alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 16 }}>✓</Text></View>}
-                    {isNext && !busy && role === 'admin' && <View style={{ backgroundColor: C.gold, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 }}><Text style={{ color: '#000', fontSize: 11, fontWeight: '800' }}>Mark ✓</Text></View>}
-                    {isNext && busy && role === 'admin' && <SpinLoader color={C.gold} />}
-                    {!done && (!isNext || role !== 'admin') && <View style={{ width: 24, height: 24, borderRadius: 8, backgroundColor: C.border }} />}
+                    {isNext && !busy && canManage && <View style={{ backgroundColor: C.gold, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 }}><Text style={{ color: '#000', fontSize: 11, fontWeight: '800' }}>Mark ✓</Text></View>}
+                    {isNext && busy && canManage && <SpinLoader color={C.gold} />}
+                    {!done && (!isNext || !canManage) && <View style={{ width: 24, height: 24, borderRadius: 8, backgroundColor: C.border }} />}
                   </TouchableOpacity>
+
+                  {/* STEP 1: Registration actions (e.g. Send to UPCL on electricity bill issue) */}
+                  {s.id === 1 && currentStep <= 1 && (
+                    <View style={{ marginTop: 6, paddingHorizontal: 4 }}>
+                      {!isUPCL ? (
+                        <TouchableOpacity
+                          onPress={() => {
+                            setTransferDefaultTarget('upcl');
+                            setShowTransferModal(true);
+                          }}
+                          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: C.blue + '15', borderWidth: 1, borderColor: C.blue + '50', borderRadius: 12, paddingVertical: 9 }}
+                        >
+                          <Text style={{ fontSize: 13 }}>🏛️</Text>
+                          <Text style={{ color: C.blue, fontSize: 12, fontWeight: '700' }}>Electricity Bill Issue? Send to UPCL</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          onPress={async () => {
+                            try {
+                              setBusy(true);
+                              await fetch(`${API_URL}/projects/${project.id}/transfer`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  target_step: 1,
+                                  status: 'Registration',
+                                  reason: 'UPCL issue resolved by registration team',
+                                  transferred_by: role || 'Worker',
+                                  is_upcl: false,
+                                })
+                              });
+                              Alert.alert('Resolved', 'Project sent back to standard Registration.');
+                              if (onRefresh) await onRefresh();
+                            } catch(e) {
+                              Alert.alert('Error', 'Failed to resolve UPCL status.');
+                            } finally {
+                              setBusy(false);
+                            }
+                          }}
+                          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: C.green + '15', borderWidth: 1, borderColor: C.green + '50', borderRadius: 12, paddingVertical: 9 }}
+                        >
+                          <Text style={{ color: C.green, fontSize: 12, fontWeight: '700' }}>✓ UPCL Resolved (Return to Normal Registration)</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+
+                  {/* STEP 2: Quotation + Sign Actions in APK */}
+                  {s.id === 2 && (
+                    <View style={{ backgroundColor: C.card2, borderRadius: 14, padding: 12, marginTop: 6, borderWidth: 1, borderColor: project.quotation ? C.purple + '40' : C.border }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Ionicons name="clipboard" size={16} color={C.purple} />
+                          <Text style={{ color: C.text, fontSize: 12, fontWeight: '700' }}>Quotation + Sign Document</Text>
+                        </View>
+                        <View style={{ backgroundColor: project.quotation ? C.purple + '30' : C.gold + '25', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
+                          <Text style={{ color: project.quotation ? C.purple : C.gold, fontSize: 10, fontWeight: '800' }}>
+                            {project.quotation ? '✓ Attached' : '⚠️ Pending'}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        {project.quotation && (
+                          <TouchableOpacity
+                            onPress={() => Linking.openURL(project.quotation.startsWith('http') ? project.quotation : `${API_URL.replace('/api', '')}${project.quotation}`)}
+                            style={{ flex: 1, backgroundColor: C.purple + '20', borderWidth: 1, borderColor: C.purple, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
+                          >
+                            <Text style={{ color: C.purple, fontSize: 12, fontWeight: '800' }}>👁️ View Quotation</Text>
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                          onPress={() => uploadProjectDoc('quotation', 'Quotation')}
+                          style={{ flex: 1, backgroundColor: C.card, borderWidth: 1, borderColor: C.borderHi, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
+                        >
+                          <Text style={{ color: C.text, fontSize: 12, fontWeight: '700' }}>
+                            {project.quotation ? '🔄 Replace Quotation' : '📄 Upload Quotation (+ Sign)'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* STEP 3: Agreement Actions in APK */}
+                  {s.id === 3 && (
+                    <View style={{ backgroundColor: C.card2, borderRadius: 14, padding: 12, marginTop: 6, borderWidth: 1, borderColor: project.agreement ? C.green + '40' : C.border }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Ionicons name="document-attach" size={16} color={C.green} />
+                          <Text style={{ color: C.text, fontSize: 12, fontWeight: '700' }}>Signed Solar Agreement</Text>
+                        </View>
+                        <View style={{ backgroundColor: project.agreement ? C.green + '30' : C.gold + '25', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
+                          <Text style={{ color: project.agreement ? C.green : C.gold, fontSize: 10, fontWeight: '800' }}>
+                            {project.agreement ? '✓ Attached' : '⚠️ Pending'}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        {project.agreement && (
+                          <TouchableOpacity
+                            onPress={() => Linking.openURL(project.agreement.startsWith('http') ? project.agreement : `${API_URL.replace('/api', '')}${project.agreement}`)}
+                            style={{ flex: 1, backgroundColor: C.green + '20', borderWidth: 1, borderColor: C.green, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
+                          >
+                            <Text style={{ color: C.green, fontSize: 12, fontWeight: '800' }}>👁️ View Agreement</Text>
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                          onPress={() => uploadProjectDoc('agreement', 'Signed Agreement')}
+                          style={{ flex: 1, backgroundColor: C.card, borderWidth: 1, borderColor: C.borderHi, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
+                        >
+                          <Text style={{ color: C.text, fontSize: 12, fontWeight: '700' }}>
+                            {project.agreement ? '🔄 Replace Agreement' : '📑 Upload Agreement'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* STEP 10: Installation Photo 1 & 2 */}
                   {s.id === 10 && (
                     <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, paddingHorizontal: 4 }}>
-                      <TouchableOpacity onPress={() => uploadStep8Photo('inst_photo_1')} style={{ flex: 1, height: 50, borderRadius: 12, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: project.inst_photo_1 ? C.gold : C.borderHi, borderStyle: project.inst_photo_1 ? 'solid' : 'dashed' }}>
+                      <TouchableOpacity onPress={() => uploadProjectDoc('inst_photo_1', 'Installation Photo 1')} style={{ flex: 1, height: 50, borderRadius: 12, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: project.inst_photo_1 ? C.gold : C.borderHi, borderStyle: project.inst_photo_1 ? 'solid' : 'dashed' }}>
                         {project.inst_photo_1 ? <Text style={{ color: C.gold, fontSize: 12, fontWeight: '600' }}>✓ Photo 1</Text> : <Ionicons name="add" size={20} color={C.text2} />}
                       </TouchableOpacity>
-                      <TouchableOpacity onPress={() => uploadStep8Photo('inst_photo_2')} style={{ flex: 1, height: 50, borderRadius: 12, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: project.inst_photo_2 ? C.gold : C.borderHi, borderStyle: project.inst_photo_2 ? 'solid' : 'dashed' }}>
+                      <TouchableOpacity onPress={() => uploadProjectDoc('inst_photo_2', 'Installation Photo 2')} style={{ flex: 1, height: 50, borderRadius: 12, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: project.inst_photo_2 ? C.gold : C.borderHi, borderStyle: project.inst_photo_2 ? 'solid' : 'dashed' }}>
                         {project.inst_photo_2 ? <Text style={{ color: C.gold, fontSize: 12, fontWeight: '600' }}>✓ Photo 2</Text> : <Ionicons name="add" size={20} color={C.text2} />}
                       </TouchableOpacity>
                     </View>
@@ -545,7 +892,7 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
               );
             })}
 
-            {/* Details */}
+            {/* Applicant Details */}
             <Text style={{ color: C.text2, fontSize: 11, fontWeight: '800', letterSpacing: 2, marginBottom: 12, marginTop: 8 }}>APPLICANT INFO</Text>
             <View style={{ backgroundColor: C.card, borderRadius: 20, padding: 16, borderWidth: 1, borderColor: C.border, marginBottom: 16 }}>
               {[
@@ -563,73 +910,112 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
               ))}
             </View>
 
-            {/* Files */}
+            {/* Documents Section (With direct Upload & View for Quotation, Agreement, Photos) */}
             <View style={{ marginTop: 8 }}>
-              <Text style={{ color: C.text2, fontSize: 11, fontWeight: '800', letterSpacing: 2, marginBottom: 12 }}>UPLOADED DOCUMENTS</Text>
-              {!(project.site_photo || project.agreement || project.quotation || project.inst_photo_1 || project.inst_photo_2) && (
-                <Text style={{ color: C.text3, fontSize: 12, fontStyle: 'italic', marginBottom: 12 }}>No documents uploaded yet.</Text>
-              )}
-              <View style={{ gap: 8 }}>
-                {project.site_photo && (
-                  <TouchableOpacity onPress={() => Linking.openURL(project.site_photo.startsWith('http') ? project.site_photo : `${API_URL.replace('/api', '')}${project.site_photo}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.blueGlow, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.blue + '40' }}>
-                    <Ionicons name="camera" size={26} color={C.blue} />
+              <Text style={{ color: C.text2, fontSize: 11, fontWeight: '800', letterSpacing: 2, marginBottom: 12 }}>PROJECT DOCUMENTS</Text>
+              
+              <View style={{ gap: 10 }}>
+                {/* Quotation */}
+                <View style={{ backgroundColor: C.card, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: project.quotation ? C.purple + '40' : C.border }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                    <Ionicons name="clipboard" size={24} color={C.purple} />
                     <View style={{ flex: 1 }}>
-                      <Text style={{ color: C.blue, fontSize: 14, fontWeight: '700' }}>Site Photo</Text>
-                      <Text style={{ color: C.text2, fontSize: 11 }}>Tap to download / view</Text>
+                      <Text style={{ color: C.purple, fontSize: 14, fontWeight: '700' }}>Quotation (+ Sign)</Text>
+                      <Text style={{ color: C.text2, fontSize: 11 }}>{project.quotation ? 'Quotation uploaded & attached' : 'Not uploaded yet'}</Text>
                     </View>
-                    <View style={{ backgroundColor: C.blue + '30', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}>
-                      <Text style={{ color: C.blue, fontSize: 10, fontWeight: '700' }}>VIEW</Text>
+                    <View style={{ backgroundColor: project.quotation ? C.purple + '25' : C.gold + '20', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
+                      <Text style={{ color: project.quotation ? C.purple : C.gold, fontSize: 10, fontWeight: '800' }}>
+                        {project.quotation ? 'ATTACHED ✓' : 'PENDING'}
+                      </Text>
                     </View>
-                  </TouchableOpacity>
-                )}
-                {project.agreement && (
-                  <TouchableOpacity onPress={() => Linking.openURL(project.agreement.startsWith('http') ? project.agreement : `${API_URL.replace('/api', '')}${project.agreement}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.greenGlow, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.green + '40' }}>
-                    <Ionicons name="document" size={26} color={C.green} />
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {project.quotation && (
+                      <TouchableOpacity
+                        onPress={() => Linking.openURL(project.quotation.startsWith('http') ? project.quotation : `${API_URL.replace('/api', '')}${project.quotation}`)}
+                        style={{ flex: 1, backgroundColor: C.purple + '20', borderWidth: 1, borderColor: C.purple, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
+                      >
+                        <Text style={{ color: C.purple, fontSize: 12, fontWeight: '800' }}>View Quotation</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      onPress={() => uploadProjectDoc('quotation', 'Quotation')}
+                      style={{ flex: 1, backgroundColor: C.card2, borderWidth: 1, borderColor: C.borderHi, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
+                    >
+                      <Text style={{ color: C.text, fontSize: 12, fontWeight: '700' }}>
+                        {project.quotation ? '🔄 Replace' : '📄 Upload Quotation'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Agreement */}
+                <View style={{ backgroundColor: C.card, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: project.agreement ? C.green + '40' : C.border }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                    <Ionicons name="document-attach" size={24} color={C.green} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: C.green, fontSize: 14, fontWeight: '700' }}>Signed Agreement</Text>
-                      <Text style={{ color: C.text2, fontSize: 11 }}>Tap to download / view</Text>
+                      <Text style={{ color: C.text2, fontSize: 11 }}>{project.agreement ? 'Agreement uploaded & signed' : 'Not uploaded yet'}</Text>
                     </View>
-                    <View style={{ backgroundColor: C.green + '30', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}>
-                      <Text style={{ color: C.green, fontSize: 10, fontWeight: '700' }}>VIEW</Text>
+                    <View style={{ backgroundColor: project.agreement ? C.green + '25' : C.gold + '20', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
+                      <Text style={{ color: project.agreement ? C.green : C.gold, fontSize: 10, fontWeight: '800' }}>
+                        {project.agreement ? 'ATTACHED ✓' : 'PENDING'}
+                      </Text>
                     </View>
-                  </TouchableOpacity>
-                )}
-                {project.quotation && (
-                  <TouchableOpacity onPress={() => Linking.openURL(project.quotation.startsWith('http') ? project.quotation : `${API_URL.replace('/api', '')}${project.quotation}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.purpleGlow, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.purple + '40' }}>
-                    <Ionicons name="clipboard" size={26} color={C.purple} />
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {project.agreement && (
+                      <TouchableOpacity
+                        onPress={() => Linking.openURL(project.agreement.startsWith('http') ? project.agreement : `${API_URL.replace('/api', '')}${project.agreement}`)}
+                        style={{ flex: 1, backgroundColor: C.green + '20', borderWidth: 1, borderColor: C.green, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
+                      >
+                        <Text style={{ color: C.green, fontSize: 12, fontWeight: '800' }}>View Agreement</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      onPress={() => uploadProjectDoc('agreement', 'Signed Agreement')}
+                      style={{ flex: 1, backgroundColor: C.card2, borderWidth: 1, borderColor: C.borderHi, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
+                    >
+                      <Text style={{ color: C.text, fontSize: 12, fontWeight: '700' }}>
+                        {project.agreement ? '🔄 Replace' : '📑 Upload Agreement'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Site Photo */}
+                <View style={{ backgroundColor: C.card, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: project.site_photo ? C.blue + '40' : C.border }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                    <Ionicons name="camera" size={24} color={C.blue} />
                     <View style={{ flex: 1 }}>
-                      <Text style={{ color: C.purple, fontSize: 14, fontWeight: '700' }}>Quotation</Text>
-                      <Text style={{ color: C.text2, fontSize: 11 }}>Tap to download / view</Text>
+                      <Text style={{ color: C.blue, fontSize: 14, fontWeight: '700' }}>Site Photo</Text>
+                      <Text style={{ color: C.text2, fontSize: 11 }}>{project.site_photo ? 'Installation site photo' : 'Not uploaded yet'}</Text>
                     </View>
-                    <View style={{ backgroundColor: C.purple + '30', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}>
-                      <Text style={{ color: C.purple, fontSize: 10, fontWeight: '700' }}>VIEW</Text>
+                    <View style={{ backgroundColor: project.site_photo ? C.blue + '25' : C.gold + '20', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
+                      <Text style={{ color: project.site_photo ? C.blue : C.gold, fontSize: 10, fontWeight: '800' }}>
+                        {project.site_photo ? 'ATTACHED ✓' : 'PENDING'}
+                      </Text>
                     </View>
-                  </TouchableOpacity>
-                )}
-                {project.inst_photo_1 && (
-                  <TouchableOpacity onPress={() => Linking.openURL(project.inst_photo_1.startsWith('http') ? project.inst_photo_1 : `${API_URL.replace('/api', '')}${project.inst_photo_1}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.gold + '15', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.gold + '40' }}>
-                    <Ionicons name="camera" size={26} color={C.gold} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: C.gold, fontSize: 14, fontWeight: '700' }}>Inst. Photo 1</Text>
-                      <Text style={{ color: C.text2, fontSize: 11 }}>Tap to download / view</Text>
-                    </View>
-                    <View style={{ backgroundColor: C.gold + '30', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}>
-                      <Text style={{ color: C.gold, fontSize: 10, fontWeight: '700' }}>VIEW</Text>
-                    </View>
-                  </TouchableOpacity>
-                )}
-                {project.inst_photo_2 && (
-                  <TouchableOpacity onPress={() => Linking.openURL(project.inst_photo_2.startsWith('http') ? project.inst_photo_2 : `${API_URL.replace('/api', '')}${project.inst_photo_2}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.gold + '15', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.gold + '40' }}>
-                    <Ionicons name="camera" size={26} color={C.gold} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: C.gold, fontSize: 14, fontWeight: '700' }}>Inst. Photo 2</Text>
-                      <Text style={{ color: C.text2, fontSize: 11 }}>Tap to download / view</Text>
-                    </View>
-                    <View style={{ backgroundColor: C.gold + '30', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}>
-                      <Text style={{ color: C.gold, fontSize: 10, fontWeight: '700' }}>VIEW</Text>
-                    </View>
-                  </TouchableOpacity>
-                )}
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {project.site_photo && (
+                      <TouchableOpacity
+                        onPress={() => Linking.openURL(project.site_photo.startsWith('http') ? project.site_photo : `${API_URL.replace('/api', '')}${project.site_photo}`)}
+                        style={{ flex: 1, backgroundColor: C.blue + '20', borderWidth: 1, borderColor: C.blue, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
+                      >
+                        <Text style={{ color: C.blue, fontSize: 12, fontWeight: '800' }}>View Photo</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      onPress={() => uploadProjectDoc('site_photo', 'Site Photo')}
+                      style={{ flex: 1, backgroundColor: C.card2, borderWidth: 1, borderColor: C.borderHi, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
+                    >
+                      <Text style={{ color: C.text, fontSize: 12, fontWeight: '700' }}>
+                        {project.site_photo ? '🔄 Replace' : '📷 Upload Photo'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               </View>
             </View>
 
@@ -672,6 +1058,21 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep }: {
                 <UPCLWaiting project={project} onClose={() => setShowUPCLModal(false)} />
               </View>
             </Modal>
+          )}
+
+          {/* Modal for Transferring project between workers */}
+          {showTransferModal && (
+            <TransferProjectModal
+              project={project}
+              role={role}
+              visible={showTransferModal}
+              defaultTarget={transferDefaultTarget}
+              onClose={() => setShowTransferModal(false)}
+              onSuccess={async () => {
+                if (onRefresh) await onRefresh();
+                close();
+              }}
+            />
           )}
         </Animated.View>
       </Animated.View>
@@ -986,13 +1387,32 @@ function DashboardScreen({ role, onLogout }: { role: string; onLogout: () => voi
     setRefreshing(true);
     try {
       const userId = await AsyncStorage.getItem('ramsun_user_id').catch(() => null);
-      const userParam = userId ? `?user_id=${userId}` : '';
-      const r = await fetch(`${API_URL}/projects${userParam}`);
+      let query = '';
+      if (role === 'client' && userId) {
+        query = `?user_id=${userId}`;
+      } else if (role && role !== 'admin') {
+        query = `?role=${role}`;
+      }
+      const r = await fetch(`${API_URL}/projects${query}`);
       if (!r.ok) throw new Error();
       setProjects(await r.json());
     } catch { }
     finally { setLoading(false); setRefreshing(false); }
-  }, []);
+  }, [role]);
+
+  const refreshProjectDetail = async () => {
+    await load();
+    if (selected) {
+      try {
+        const r = await fetch(`${API_URL}/projects`);
+        if (r.ok) {
+          const list = await r.json();
+          const updated = list.find((p: any) => p.id === selected.id);
+          if (updated) setSelected(updated);
+        }
+      } catch(e) {}
+    }
+  };
 
   useEffect(() => { load(); }, [load]);
 
@@ -1136,7 +1556,7 @@ function DashboardScreen({ role, onLogout }: { role: string; onLogout: () => voi
       </Animated.View>
 
       {selected && (
-        <ProjectDetailModal project={selected} role={role} visible={!!selected} onClose={() => setSelected(null)} onUpdateStep={updateStep} />
+        <ProjectDetailModal project={selected} role={role} visible={!!selected} onClose={() => setSelected(null)} onUpdateStep={updateStep} onRefresh={refreshProjectDetail} />
       )}
       <NewProjectModal visible={newModal} onClose={() => setNewModal(false)} onSuccess={() => { load(); showToast('Project created successfully! 🎉'); }} />
     </SafeAreaView>
