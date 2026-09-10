@@ -300,13 +300,14 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
 }) {
   const currentStep = project?.step ?? 1;
   const isUPCL = Boolean(
-    (project?.status && (project.status.includes('UPCL') || project.status.toLowerCase().includes('upcl'))) ||
-    project?.needs_upcl ||
-    (project?.transfer_remarks && project.transfer_remarks.toLowerCase().includes('upcl')) ||
-    project?.transferred_by === 'upcl'
+    (currentStep === 1 || !project?.step) &&
+    (
+      project?.needs_upcl === 1 ||
+      project?.needs_upcl === true ||
+      (project?.status && (project.status.includes('UPCL') || project.status.toLowerCase().includes('upcl')))
+    )
   );
 
-  const [showUPCLModal, setShowUPCLModal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [reminderMsg, setReminderMsg] = useState('');
   const slideY = useRef(new Animated.Value(800)).current;
@@ -326,6 +327,76 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
       Animated.timing(slideY, { toValue: 800, duration: 260, useNativeDriver: true }),
       Animated.timing(bg, { toValue: 0, duration: 220, useNativeDriver: true }),
     ]).start(() => { slideY.setValue(800); bg.setValue(0); onClose(); });
+  };
+
+  const uploadDoc = async (field: 'inst_photo_1' | 'inst_photo_2' | 'dcr', label: string) => {
+    try {
+      let asset: any = null;
+      let fileName = '';
+      let mimeType = '';
+
+      if (field === 'dcr') {
+        const r = await DocumentPicker.getDocumentAsync({
+          type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/*', '*/*'],
+          copyToCacheDirectory: true,
+        });
+        if (r.canceled || !r.assets || r.assets.length === 0) return;
+        asset = r.assets[0];
+        fileName = asset.name || 'dcr_certificate.pdf';
+        mimeType = asset.mimeType || 'application/pdf';
+      } else {
+        const r = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          quality: 0.85,
+        });
+        if (r.canceled || !r.assets || r.assets.length === 0) return;
+        asset = r.assets[0];
+        fileName = asset.fileName || asset.name || `${field}_${Date.now()}.jpg`;
+        mimeType = asset.mimeType || 'image/jpeg';
+      }
+
+      setBusy(true);
+
+      const form = new FormData();
+      if (!mimeType || mimeType === 'image') {
+        const lower = fileName.toLowerCase();
+        if (lower.endsWith('.pdf')) mimeType = 'application/pdf';
+        else if (lower.endsWith('.png')) mimeType = 'image/png';
+        else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mimeType = 'image/jpeg';
+        else mimeType = field === 'dcr' ? 'application/pdf' : 'image/jpeg';
+      }
+
+      if (Platform.OS === 'web') {
+        const blobRes = await fetch(asset.uri);
+        const blob = await blobRes.blob();
+        form.append('file', blob, fileName);
+      } else {
+        form.append('file', { uri: asset.uri, name: fileName, type: mimeType } as any);
+      }
+
+      const res = await fetch(`${API_URL}/upload`, { method: 'POST', body: form });
+      const json = await res.json();
+      if (json.success && json.filePath) {
+        const updateRes = await fetch(`${API_URL}/projects/${project.id}/document`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [field]: json.filePath })
+        });
+        if (updateRes.ok) {
+          project[field] = json.filePath;
+          Alert.alert('Success', `${label} uploaded successfully!`);
+          if (onRefresh) await onRefresh();
+        } else {
+          Alert.alert('Error', `Failed to save ${label} to project.`);
+        }
+      } else {
+        Alert.alert('Error', json.error || `Failed to upload ${label}.`);
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Something went wrong during upload.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (!project) return null;
@@ -362,18 +433,7 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
               </TouchableOpacity>
             </View>
 
-            {/* Quick Action: ONLY UPCL Portal if currently routed to UPCL */}
-            {isUPCL && (
-              <View style={{ marginBottom: 16 }}>
-                <TouchableOpacity
-                  onPress={() => setShowUPCLModal(true)}
-                  style={{ backgroundColor: C.blue + '20', borderWidth: 1.5, borderColor: C.blue, borderRadius: 14, paddingVertical: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}
-                >
-                  <Text style={{ fontSize: 16 }}>🏛️</Text>
-                  <Text style={{ color: C.blue, fontSize: 13, fontWeight: '800' }}>View UPCL Verification Portal</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+
 
             {/* Transfer Remarks Audit Box from Admin/Worker */}
             {project.transfer_remarks && (
@@ -408,25 +468,26 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
               </View>
             </View>
 
-            {/* UPCL Verification Banner: ONLY shown when project is routed to UPCL in Admin Panel */}
+            {/* UPCL Verification Banner: ONLY shown when project is routed to UPCL at Step 1 */}
             {isUPCL && (
               <View style={{ backgroundColor: C.blue + '18', borderRadius: 20, padding: 18, marginBottom: 16, borderWidth: 1.5, borderColor: C.blue + '55' }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                  <Text style={{ fontSize: 28 }}>🏛️</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                  <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: C.blue + '30', alignItems: 'center', justifyContent: 'center' }}>
+                    <SpinLoader color={C.blue} />
+                  </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ color: C.blue, fontSize: 16, fontWeight: '900' }}>UPCL Verification Underway</Text>
-                    <Text style={{ color: C.gold, fontSize: 12, fontWeight: '700', marginTop: 1 }}>Electricity Bill / Name Discrepancy</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                      <Text style={{ color: C.blue, fontSize: 15, fontWeight: '900' }}>UPCL Verification</Text>
+                      <View style={{ backgroundColor: C.blue + '30', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                        <Text style={{ color: C.blue, fontSize: 9, fontWeight: '800' }}>IN PROGRESS</Text>
+                      </View>
+                    </View>
+                    <Text style={{ color: C.gold, fontSize: 11, fontWeight: '700' }}>Electricity Bill / Meter Discrepancy</Text>
+                    <Text style={{ color: C.text2, fontSize: 12, lineHeight: 18, marginTop: 4 }}>
+                      Your application documents are currently undergoing verification with the UPCL electricity department.
+                    </Text>
                   </View>
                 </View>
-                <Text style={{ color: C.text2, fontSize: 12, lineHeight: 18, marginBottom: 12 }}>
-                  Your application documents are currently undergoing verification with the UPCL electricity department.
-                </Text>
-                <TouchableOpacity
-                  onPress={() => setShowUPCLModal(true)}
-                  style={{ backgroundColor: C.blue, borderRadius: 12, paddingVertical: 11, alignItems: 'center', justifyContent: 'center' }}
-                >
-                  <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>🌐 Open UPCL Portal Link</Text>
-                </TouchableOpacity>
               </View>
             )}
 
@@ -502,10 +563,9 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
                     {!isDone && !isCurrent && <View style={{ width: 24, height: 24, borderRadius: 8, backgroundColor: C.border }} />}
                   </View>
 
-                  {/* DYNAMIC UPCL STEP: ONLY shown when project is routed to UPCL in Admin Panel */}
+                  {/* DYNAMIC UPCL STEP: ONLY shown when project is routed to UPCL at Step 1 */}
                   {isUPCL && s.id === 1 && (
-                    <TouchableOpacity
-                      onPress={() => setShowUPCLModal(true)}
+                    <View
                       style={{
                         flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 18,
                         backgroundColor: C.blue + '20', borderWidth: 1.5, borderColor: C.blue, marginTop: 10,
@@ -523,44 +583,69 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
                         </View>
                         <Text style={{ color: C.text2, fontSize: 12, marginTop: 2 }}>Electricity bill & meter discrepancy verification</Text>
                       </View>
-                      <Text style={{ color: C.blue, fontSize: 12, fontWeight: '700' }}>Portal →</Text>
-                    </TouchableOpacity>
-                  )}
-
-                  {/* STEP 7 & 10: Installation Photo 1 & 2 View only */}
-                  {(s.id === 7 || s.id === 10) && (project.inst_photo_1 || project.inst_photo_2) && (
-                    <View style={{ marginTop: 8, paddingHorizontal: 4 }}>
-                      <Text style={{ color: C.text2, fontSize: 10, fontWeight: '700', marginBottom: 6, letterSpacing: 1 }}>INSTALLATION PHOTOS</Text>
-                      <View style={{ flexDirection: 'row', gap: 8 }}>
-                        {project.inst_photo_1 && (
-                          <TouchableOpacity
-                            onPress={() => Linking.openURL(project.inst_photo_1.startsWith('http') ? project.inst_photo_1 : `${API_URL.replace('/api', '')}${project.inst_photo_1}`)}
-                            style={{ flex: 1, backgroundColor: C.blue + '20', borderWidth: 1, borderColor: C.blue, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
-                          >
-                            <Text style={{ color: C.blue, fontSize: 11, fontWeight: '800' }}>View Photo 1</Text>
-                          </TouchableOpacity>
-                        )}
-                        {project.inst_photo_2 && (
-                          <TouchableOpacity
-                            onPress={() => Linking.openURL(project.inst_photo_2.startsWith('http') ? project.inst_photo_2 : `${API_URL.replace('/api', '')}${project.inst_photo_2}`)}
-                            style={{ flex: 1, backgroundColor: C.blue + '20', borderWidth: 1, borderColor: C.blue, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
-                          >
-                            <Text style={{ color: C.blue, fontSize: 11, fontWeight: '800' }}>View Photo 2</Text>
-                          </TouchableOpacity>
-                        )}
+                      <View style={{ backgroundColor: C.blue + '25', borderWidth: 1, borderColor: C.blue, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5 }}>
+                        <Text style={{ color: C.blue, fontSize: 10, fontWeight: '800' }}>IN PROGRESS</Text>
                       </View>
                     </View>
                   )}
 
-                  {/* STEP 9: DCR Certificate View only */}
-                  {s.id === 9 && project.dcr && (
+                  {/* STEP 7 & 10: Installation Photo 1 & 2 View / Upload */}
+                  {(s.id === 7 || s.id === 10) && (
+                    <View style={{ marginTop: 8, paddingHorizontal: 4 }}>
+                      <Text style={{ color: C.text2, fontSize: 10, fontWeight: '700', marginBottom: 6, letterSpacing: 1 }}>INSTALLATION PHOTOS</Text>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <TouchableOpacity
+                          onPress={() => {
+                            if (project.inst_photo_1) {
+                              Linking.openURL(project.inst_photo_1.startsWith('http') ? project.inst_photo_1 : `${API_URL.replace('/api', '')}${project.inst_photo_1}`);
+                            } else {
+                              uploadDoc('inst_photo_1', 'Installation Photo 1');
+                            }
+                          }}
+                          disabled={busy}
+                          style={{ flex: 1, backgroundColor: project.inst_photo_1 ? C.blue + '20' : C.gold + '20', borderWidth: 1, borderColor: project.inst_photo_1 ? C.blue : C.gold, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
+                        >
+                          <Text style={{ color: project.inst_photo_1 ? C.blue : C.gold, fontSize: 11, fontWeight: '800' }}>
+                            {project.inst_photo_1 ? 'View Photo 1' : '+ Upload Photo 1'}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => {
+                            if (project.inst_photo_2) {
+                              Linking.openURL(project.inst_photo_2.startsWith('http') ? project.inst_photo_2 : `${API_URL.replace('/api', '')}${project.inst_photo_2}`);
+                            } else {
+                              uploadDoc('inst_photo_2', 'Installation Photo 2');
+                            }
+                          }}
+                          disabled={busy}
+                          style={{ flex: 1, backgroundColor: project.inst_photo_2 ? C.blue + '20' : C.gold + '20', borderWidth: 1, borderColor: project.inst_photo_2 ? C.blue : C.gold, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
+                        >
+                          <Text style={{ color: project.inst_photo_2 ? C.blue : C.gold, fontSize: 11, fontWeight: '800' }}>
+                            {project.inst_photo_2 ? 'View Photo 2' : '+ Upload Photo 2'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* STEP 9: DCR Certificate View / Upload */}
+                  {s.id === 9 && (
                     <View style={{ marginTop: 8, paddingHorizontal: 4 }}>
                       <Text style={{ color: C.text2, fontSize: 10, fontWeight: '700', marginBottom: 6, letterSpacing: 1 }}>DCR CERTIFICATE</Text>
                       <TouchableOpacity
-                        onPress={() => Linking.openURL(project.dcr.startsWith('http') ? project.dcr : `${API_URL.replace('/api', '')}${project.dcr}`)}
+                        onPress={() => {
+                          if (project.dcr) {
+                            Linking.openURL(project.dcr.startsWith('http') ? project.dcr : `${API_URL.replace('/api', '')}${project.dcr}`);
+                          } else {
+                            uploadDoc('dcr', 'DCR Certificate');
+                          }
+                        }}
+                        disabled={busy}
                         style={{ backgroundColor: C.purple + '20', borderWidth: 1, borderColor: C.purple, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
                       >
-                        <Text style={{ color: C.purple, fontSize: 11, fontWeight: '800' }}>View DCR Document</Text>
+                        <Text style={{ color: C.purple, fontSize: 11, fontWeight: '800' }}>
+                          {project.dcr ? 'View DCR Document' : '+ Upload DCR Document (File)'}
+                        </Text>
                       </TouchableOpacity>
                     </View>
                   )}
@@ -665,11 +750,11 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
 
                 {/* Installation Photos */}
                 <View style={{ backgroundColor: C.card, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: (project.inst_photo_1 || project.inst_photo_2) ? C.gold + '40' : C.border }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: (project.inst_photo_1 || project.inst_photo_2) ? 10 : 0 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                     <Ionicons name="images" size={24} color={C.gold} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: C.gold, fontSize: 14, fontWeight: '700' }}>Installation Photos (1 & 2)</Text>
-                      <Text style={{ color: C.text2, fontSize: 11 }}>{(project.inst_photo_1 || project.inst_photo_2) ? 'Captured by installation team' : 'Pending site installation by team'}</Text>
+                      <Text style={{ color: C.text2, fontSize: 11 }}>{(project.inst_photo_1 || project.inst_photo_2) ? 'Captured site installation' : 'Upload on-site installation photos'}</Text>
                     </View>
                     <View style={{ backgroundColor: (project.inst_photo_1 || project.inst_photo_2) ? C.gold + '25' : C.text3 + '20', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
                       <Text style={{ color: (project.inst_photo_1 && project.inst_photo_2) ? C.gold : C.text2, fontSize: 10, fontWeight: '800' }}>
@@ -677,33 +762,91 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
                       </Text>
                     </View>
                   </View>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    {project.inst_photo_1 && (
-                      <TouchableOpacity
-                        onPress={() => Linking.openURL(project.inst_photo_1.startsWith('http') ? project.inst_photo_1 : `${API_URL.replace('/api', '')}${project.inst_photo_1}`)}
-                        style={{ flex: 1, backgroundColor: C.gold + '20', borderWidth: 1, borderColor: C.gold, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
-                      >
-                        <Text style={{ color: C.gold, fontSize: 12, fontWeight: '800' }}>View Photo 1</Text>
-                      </TouchableOpacity>
-                    )}
-                    {project.inst_photo_2 && (
-                      <TouchableOpacity
-                        onPress={() => Linking.openURL(project.inst_photo_2.startsWith('http') ? project.inst_photo_2 : `${API_URL.replace('/api', '')}${project.inst_photo_2}`)}
-                        style={{ flex: 1, backgroundColor: C.gold + '20', borderWidth: 1, borderColor: C.gold, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
-                      >
-                        <Text style={{ color: C.gold, fontSize: 12, fontWeight: '800' }}>View Photo 2</Text>
-                      </TouchableOpacity>
-                    )}
+
+                  {/* Photo 1 Controls */}
+                  <View style={{ marginBottom: 8, padding: 10, backgroundColor: C.bg2, borderRadius: 12, borderWidth: 1, borderColor: C.border }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <Text style={{ color: C.text, fontSize: 12, fontWeight: '700' }}>Installation Photo 1</Text>
+                      <Text style={{ color: project.inst_photo_1 ? C.green : C.text3, fontSize: 10, fontWeight: '800' }}>
+                        {project.inst_photo_1 ? 'Attached ✓' : 'Missing'}
+                      </Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      {project.inst_photo_1 ? (
+                        <>
+                          <TouchableOpacity
+                            onPress={() => Linking.openURL(project.inst_photo_1.startsWith('http') ? project.inst_photo_1 : `${API_URL.replace('/api', '')}${project.inst_photo_1}`)}
+                            style={{ flex: 1, backgroundColor: C.gold + '20', borderWidth: 1, borderColor: C.gold, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
+                          >
+                            <Text style={{ color: C.gold, fontSize: 11, fontWeight: '800' }}>View Photo 1</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => uploadDoc('inst_photo_1', 'Installation Photo 1')}
+                            disabled={busy}
+                            style={{ flex: 1, backgroundColor: C.card, borderWidth: 1, borderColor: C.borderHi, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
+                          >
+                            <Text style={{ color: C.text, fontSize: 11, fontWeight: '800' }}>Replace Photo 1</Text>
+                          </TouchableOpacity>
+                        </>
+                      ) : (
+                        <TouchableOpacity
+                          onPress={() => uploadDoc('inst_photo_1', 'Installation Photo 1')}
+                          disabled={busy}
+                          style={{ flex: 1, backgroundColor: C.gold + '25', borderWidth: 1, borderColor: C.gold, borderRadius: 10, paddingVertical: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+                        >
+                          <Ionicons name="cloud-upload" size={14} color={C.gold} />
+                          <Text style={{ color: C.gold, fontSize: 12, fontWeight: '800' }}>Upload Photo 1</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Photo 2 Controls */}
+                  <View style={{ padding: 10, backgroundColor: C.bg2, borderRadius: 12, borderWidth: 1, borderColor: C.border }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <Text style={{ color: C.text, fontSize: 12, fontWeight: '700' }}>Installation Photo 2</Text>
+                      <Text style={{ color: project.inst_photo_2 ? C.green : C.text3, fontSize: 10, fontWeight: '800' }}>
+                        {project.inst_photo_2 ? 'Attached ✓' : 'Missing'}
+                      </Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      {project.inst_photo_2 ? (
+                        <>
+                          <TouchableOpacity
+                            onPress={() => Linking.openURL(project.inst_photo_2.startsWith('http') ? project.inst_photo_2 : `${API_URL.replace('/api', '')}${project.inst_photo_2}`)}
+                            style={{ flex: 1, backgroundColor: C.gold + '20', borderWidth: 1, borderColor: C.gold, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
+                          >
+                            <Text style={{ color: C.gold, fontSize: 11, fontWeight: '800' }}>View Photo 2</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => uploadDoc('inst_photo_2', 'Installation Photo 2')}
+                            disabled={busy}
+                            style={{ flex: 1, backgroundColor: C.card, borderWidth: 1, borderColor: C.borderHi, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
+                          >
+                            <Text style={{ color: C.text, fontSize: 11, fontWeight: '800' }}>Replace Photo 2</Text>
+                          </TouchableOpacity>
+                        </>
+                      ) : (
+                        <TouchableOpacity
+                          onPress={() => uploadDoc('inst_photo_2', 'Installation Photo 2')}
+                          disabled={busy}
+                          style={{ flex: 1, backgroundColor: C.gold + '25', borderWidth: 1, borderColor: C.gold, borderRadius: 10, paddingVertical: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+                        >
+                          <Ionicons name="cloud-upload" size={14} color={C.gold} />
+                          <Text style={{ color: C.gold, fontSize: 12, fontWeight: '800' }}>Upload Photo 2</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </View>
                 </View>
 
                 {/* DCR Certificate */}
                 <View style={{ backgroundColor: C.card, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: project.dcr ? C.purple + '40' : C.border }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: project.dcr ? 10 : 0 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                     <Ionicons name="folder-open" size={24} color={C.purple} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: C.purple, fontSize: 14, fontWeight: '700' }}>DCR Certificate / Document</Text>
-                      <Text style={{ color: C.text2, fontSize: 11 }}>{project.dcr ? 'DCR certificate attached' : 'Pending subsidy documentation'}</Text>
+                      <Text style={{ color: C.text2, fontSize: 11 }}>{project.dcr ? 'DCR certificate attached' : 'Upload DCR PDF or document from files'}</Text>
                     </View>
                     <View style={{ backgroundColor: project.dcr ? C.purple + '25' : C.text3 + '20', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
                       <Text style={{ color: project.dcr ? C.purple : C.text2, fontSize: 10, fontWeight: '800' }}>
@@ -711,14 +854,35 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
                       </Text>
                     </View>
                   </View>
-                  {project.dcr && (
-                    <TouchableOpacity
-                      onPress={() => Linking.openURL(project.dcr.startsWith('http') ? project.dcr : `${API_URL.replace('/api', '')}${project.dcr}`)}
-                      style={{ backgroundColor: C.purple + '20', borderWidth: 1, borderColor: C.purple, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
-                    >
-                      <Text style={{ color: C.purple, fontSize: 12, fontWeight: '800' }}>View DCR Document</Text>
-                    </TouchableOpacity>
-                  )}
+
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {project.dcr ? (
+                      <>
+                        <TouchableOpacity
+                          onPress={() => Linking.openURL(project.dcr.startsWith('http') ? project.dcr : `${API_URL.replace('/api', '')}${project.dcr}`)}
+                          style={{ flex: 1, backgroundColor: C.purple + '20', borderWidth: 1, borderColor: C.purple, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
+                        >
+                          <Text style={{ color: C.purple, fontSize: 12, fontWeight: '800' }}>View DCR Document</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => uploadDoc('dcr', 'DCR Certificate')}
+                          disabled={busy}
+                          style={{ flex: 1, backgroundColor: C.card, borderWidth: 1, borderColor: C.borderHi, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
+                        >
+                          <Text style={{ color: C.text, fontSize: 12, fontWeight: '800' }}>Replace DCR</Text>
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <TouchableOpacity
+                        onPress={() => uploadDoc('dcr', 'DCR Certificate')}
+                        disabled={busy}
+                        style={{ flex: 1, backgroundColor: C.purple + '25', borderWidth: 1, borderColor: C.purple, borderRadius: 10, paddingVertical: 11, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+                      >
+                        <Ionicons name="document-text" size={16} color={C.purple} />
+                        <Text style={{ color: C.purple, fontSize: 12, fontWeight: '800' }}>Upload DCR Certificate (PDF / File)</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
               </View>
             </View>
@@ -754,15 +918,6 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
               </View>
             </View>
           </ScrollView>
-
-          {/* Modal for UPCL Portal when user taps the UPCL option */}
-          {showUPCLModal && (
-            <Modal visible={showUPCLModal} transparent animationType="slide" onRequestClose={() => setShowUPCLModal(false)}>
-              <View style={{ flex: 1, backgroundColor: C.bg }}>
-                <UPCLWaiting project={project} onClose={() => setShowUPCLModal(false)} />
-              </View>
-            </Modal>
-          )}
         </Animated.View>
       </Animated.View>
     </Modal>
@@ -1006,10 +1161,12 @@ function ProjectCard({ project, onPress, index }: { project: any; onPress: () =>
 
   const pct = (((project.step || 1) - 1) / 10) * 100;
   const isUPCL = Boolean(
-    (project?.status && (project.status.includes('UPCL') || project.status.toLowerCase().includes('upcl'))) ||
-    project?.needs_upcl ||
-    (project?.transfer_remarks && project.transfer_remarks.toLowerCase().includes('upcl')) ||
-    project?.transferred_by === 'upcl'
+    ((project.step || 1) === 1) &&
+    (
+      project?.needs_upcl === 1 ||
+      project?.needs_upcl === true ||
+      (project?.status && (project.status.includes('UPCL') || project.status.toLowerCase().includes('upcl')))
+    )
   );
   const stepColors = [C.text3, C.blue, C.purple, C.gold, C.goldLight, C.green, C.gold, C.blue, C.purple, C.green, C.gold, C.purple];
   const col = isUPCL ? C.blue : stepColors[Math.min(project.step || 1, 11)];

@@ -469,6 +469,9 @@ app.put('/api/projects/:id/step', async (req, res) => {
 
     let q = 'UPDATE projects SET step=?, status=?, failed_document=?, rejection_reason=?';
     let params = [step, status || `Step ${step}`, failed_document || null, rejection_reason || null];
+    if (step >= 2) {
+      q += ', needs_upcl=0';
+    }
 
     if (bank_remarks !== undefined) {
       q += ', bank_remarks=?';
@@ -527,8 +530,8 @@ app.post('/api/projects/:id/transfer', async (req, res) => {
     const fromStep = existing[0].step || 1;
     const transferReason = reason ? String(reason).trim() : 'Transferred by worker';
     const workerName = transferred_by ? String(transferred_by).trim() : 'Worker';
-    const isUpclTarget = req.body.is_upcl || (targetStep === 1 && (String(status || '').includes('UPCL') || transferReason.toLowerCase().includes('upcl')));
-    const needsUpclVal = isUpclTarget ? 1 : (targetStep > 1 ? 0 : (existing[0].needs_upcl || 0));
+    const isUpclTarget = Boolean(req.body.is_upcl || (targetStep === 1 && String(status || '').toLowerCase().includes('upcl')));
+    const needsUpclVal = isUpclTarget ? 1 : 0;
 
     await getPool().query(
       `UPDATE projects 
