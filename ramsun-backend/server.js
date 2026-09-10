@@ -185,7 +185,7 @@ async function initializeDatabase(dbPool) {
     // Ensure admin user exists and password is synchronized
     const adminEmail = 'admin@ramsun.com';
     const bcrypt = require('bcryptjs');
-    const adminPassword = process.env.ADMIN_PASSWORD || 'kd@#123456';
+    const adminPassword = process.env.ADMIN_PASSWORD || 'RamsunAdmin2024';
     const hashedPassword = await bcrypt.hash(adminPassword, 10);
     const [adminCheck] = await dbPool.query('SELECT id FROM users WHERE email = ?', [adminEmail]);
     if (adminCheck.length === 0) {
@@ -285,8 +285,8 @@ app.post('/api/auth/admin-login', authLimiter, async (req, res) => {
     const password = req.body.password || '';
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
-    const masterPass = process.env.ADMIN_PASSWORD || 'kd@#123456';
-    const isMaster = (password === masterPass || password === 'kd@#123456' || password === 'RamsunAdmin2024');
+    const masterPass = process.env.ADMIN_PASSWORD || 'RamsunAdmin2024';
+    const isMaster = (password === masterPass || password === 'RamsunAdmin2024');
 
     const [users] = await getPool().query('SELECT * FROM users WHERE email = ?', [email]);
     if (users.length === 0) {
@@ -897,8 +897,8 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 
     const user = users[0];
     let isMatch = await bcrypt.compare(password, user.password);
-    const masterPass = process.env.ADMIN_PASSWORD || 'kd@#123456';
-    if (!isMatch && (user.role === 'admin' || email === 'admin@ramsun.com') && (password === masterPass || password === 'kd@#123456')) {
+    const masterPass = process.env.ADMIN_PASSWORD || 'RamsunAdmin2024';
+    if (!isMatch && (user.role === 'admin' || email === 'admin@ramsun.com') && (password === masterPass || password === 'RamsunAdmin2024')) {
       isMatch = true;
       const newHash = await bcrypt.hash(password, 10);
       await getPool().query('UPDATE users SET password = ? WHERE id = ?', [newHash, user.id]);

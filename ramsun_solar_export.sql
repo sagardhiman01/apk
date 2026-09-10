@@ -1,4 +1,4 @@
-﻿-- MariaDB dump 10.19  Distrib 10.4.32-MariaDB, for Win64 (AMD64)
+-- MariaDB dump 10.19  Distrib 10.4.32-MariaDB, for Win64 (AMD64)
 --
 -- Host: localhost    Database: ramsun_solar
 -- ------------------------------------------------------
@@ -141,7 +141,7 @@ CREATE TABLE `users` (
 
 LOCK TABLES `users` WRITE;
 /*!40000 ALTER TABLE `users` DISABLE KEYS */;
-INSERT INTO `users` VALUES (1,'admin@ramsun.com','$2a$10$wYpS3D.N/qJc3R7J4lX3x.H1W/Jq9x.9lTq0Z4I3x9/Q1wQ/O9M5G','admin','2026-07-02 19:55:04'),(2,'team@ramsun.com','$2a$10$wYpS3D.N/qJc3R7J4lX3x.H1W/Jq9x.9lTq0Z4I3x9/Q1wQ/O9M5G','solar_team','2026-07-02 19:55:04'),(3,'office@ramsun.com','$2a$10$wYpS3D.N/qJc3R7J4lX3x.H1W/Jq9x.9lTq0Z4I3x9/Q1wQ/O9M5G','back_office','2026-07-02 19:55:04'),(4,'sagardhiman45605@gmail.com','$2b$10$yhpguT2qGTfSwvXq1G96kuzYkIjhDiXyVmXIaK.lVzoizWCETeiXC','employee','2026-07-02 19:58:22'),(5,'sagarsagar46605@gmail.com','$2b$10$9EDC7TRWq4mzQImZD8aZmuxSDF22dUosRPzUTZsq95LSH5JIv45fe','employee','2026-07-04 16:27:56');
+INSERT INTO `users` VALUES (1,'admin@ramsun.com','$2b$10$eErnwly1BJMmeHx24wwbpuGId0ESTIRz1KMQX.u6P3Jmv1pVhLxzq','admin','2026-07-02 19:55:04'),(2,'team@ramsun.com','$2a$10$wYpS3D.N/qJc3R7J4lX3x.H1W/Jq9x.9lTq0Z4I3x9/Q1wQ/O9M5G','solar_team','2026-07-02 19:55:04'),(3,'office@ramsun.com','$2a$10$wYpS3D.N/qJc3R7J4lX3x.H1W/Jq9x.9lTq0Z4I3x9/Q1wQ/O9M5G','back_office','2026-07-02 19:55:04'),(4,'sagardhiman45605@gmail.com','$2b$10$yhpguT2qGTfSwvXq1G96kuzYkIjhDiXyVmXIaK.lVzoizWCETeiXC','employee','2026-07-02 19:58:22'),(5,'sagarsagar46605@gmail.com','$2b$10$9EDC7TRWq4mzQImZD8aZmuxSDF22dUosRPzUTZsq95LSH5JIv45fe','employee','2026-07-04 16:27:56');
 /*!40000 ALTER TABLE `users` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;

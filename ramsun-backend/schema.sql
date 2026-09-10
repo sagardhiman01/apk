@@ -63,7 +63,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS password VARCHAR(255) NOT NULL DEFAUL
 
 -- Insert default users (password is 'password123' hashed)
 INSERT IGNORE INTO users (email, password, role) VALUES 
-('admin@ramsun.com', '$2a$10$wYpS3D.N/qJc3R7J4lX3x.H1W/Jq9x.9lTq0Z4I3x9/Q1wQ/O9M5G', 'admin'),
+('admin@ramsun.com', '$2b$10$eErnwly1BJMmeHx24wwbpuGId0ESTIRz1KMQX.u6P3Jmv1pVhLxzq', 'admin'),
 ('team@ramsun.com', '$2a$10$wYpS3D.N/qJc3R7J4lX3x.H1W/Jq9x.9lTq0Z4I3x9/Q1wQ/O9M5G', 'solar_team'),
 ('office@ramsun.com', '$2a$10$wYpS3D.N/qJc3R7J4lX3x.H1W/Jq9x.9lTq0Z4I3x9/Q1wQ/O9M5G', 'back_office');
 
