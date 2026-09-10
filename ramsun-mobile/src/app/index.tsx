@@ -10,6 +10,9 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const getApiUrl = () => {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
   if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
     const host = window.location.hostname || 'localhost';
     if (host === 'localhost' || host === '127.0.0.1') {
@@ -17,7 +20,7 @@ const getApiUrl = () => {
     }
     return `${window.location.origin}/api`;
   }
-  return process.env.EXPO_PUBLIC_API_URL || 'https://ramsunenergy.online/api';
+  return 'https://ramsunenergy.online/api';
 };
 
 const API_URL = getApiUrl();
@@ -589,66 +592,7 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
                     </View>
                   )}
 
-                  {/* STEP 7 & 10: Installation Photo 1 & 2 View / Upload */}
-                  {(s.id === 7 || s.id === 10) && (
-                    <View style={{ marginTop: 8, paddingHorizontal: 4 }}>
-                      <Text style={{ color: C.text2, fontSize: 10, fontWeight: '700', marginBottom: 6, letterSpacing: 1 }}>INSTALLATION PHOTOS</Text>
-                      <View style={{ flexDirection: 'row', gap: 8 }}>
-                        <TouchableOpacity
-                          onPress={() => {
-                            if (project.inst_photo_1) {
-                              Linking.openURL(project.inst_photo_1.startsWith('http') ? project.inst_photo_1 : `${API_URL.replace('/api', '')}${project.inst_photo_1}`);
-                            } else {
-                              uploadDoc('inst_photo_1', 'Installation Photo 1');
-                            }
-                          }}
-                          disabled={busy}
-                          style={{ flex: 1, backgroundColor: project.inst_photo_1 ? C.blue + '20' : C.gold + '20', borderWidth: 1, borderColor: project.inst_photo_1 ? C.blue : C.gold, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
-                        >
-                          <Text style={{ color: project.inst_photo_1 ? C.blue : C.gold, fontSize: 11, fontWeight: '800' }}>
-                            {project.inst_photo_1 ? 'View Photo 1' : '+ Upload Photo 1'}
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={() => {
-                            if (project.inst_photo_2) {
-                              Linking.openURL(project.inst_photo_2.startsWith('http') ? project.inst_photo_2 : `${API_URL.replace('/api', '')}${project.inst_photo_2}`);
-                            } else {
-                              uploadDoc('inst_photo_2', 'Installation Photo 2');
-                            }
-                          }}
-                          disabled={busy}
-                          style={{ flex: 1, backgroundColor: project.inst_photo_2 ? C.blue + '20' : C.gold + '20', borderWidth: 1, borderColor: project.inst_photo_2 ? C.blue : C.gold, borderRadius: 10, paddingVertical: 8, alignItems: 'center' }}
-                        >
-                          <Text style={{ color: project.inst_photo_2 ? C.blue : C.gold, fontSize: 11, fontWeight: '800' }}>
-                            {project.inst_photo_2 ? 'View Photo 2' : '+ Upload Photo 2'}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  )}
 
-                  {/* STEP 9: DCR Certificate View / Upload */}
-                  {s.id === 9 && (
-                    <View style={{ marginTop: 8, paddingHorizontal: 4 }}>
-                      <Text style={{ color: C.text2, fontSize: 10, fontWeight: '700', marginBottom: 6, letterSpacing: 1 }}>DCR CERTIFICATE</Text>
-                      <TouchableOpacity
-                        onPress={() => {
-                          if (project.dcr) {
-                            Linking.openURL(project.dcr.startsWith('http') ? project.dcr : `${API_URL.replace('/api', '')}${project.dcr}`);
-                          } else {
-                            uploadDoc('dcr', 'DCR Certificate');
-                          }
-                        }}
-                        disabled={busy}
-                        style={{ backgroundColor: C.purple + '20', borderWidth: 1, borderColor: C.purple, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
-                      >
-                        <Text style={{ color: C.purple, fontSize: 11, fontWeight: '800' }}>
-                          {project.dcr ? 'View DCR Document' : '+ Upload DCR Document (File)'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
                 </View>
               );
             })}
