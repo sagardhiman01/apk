@@ -357,10 +357,55 @@ app.post('/api/users', async (req, res) => {
 
 app.delete('/api/users/:id', async (req, res) => {
   try {
+    const [u] = await getPool().query('SELECT email, role FROM users WHERE id = ?', [req.params.id]);
+    if (u.length > 0 && (u[0].email === 'admin@ramsun.com' || u[0].role === 'admin')) {
+      return res.status(400).json({ error: 'Cannot delete primary admin account' });
+    }
     await getPool().query('DELETE FROM users WHERE id = ?', [req.params.id]);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
+app.post('/api/users/bulk-delete', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'No user IDs provided' });
+    }
+    await getPool().query('DELETE FROM users WHERE id IN (?) AND email != "admin@ramsun.com" AND role != "admin"', [ids]);
+    res.json({ success: true, count: ids.length });
+  } catch (error) {
+    console.error('Failed to bulk delete users:', error);
+    res.status(500).json({ error: 'Failed to delete selected users' });
+  }
+});
+
+app.delete('/api/auth/users/:id', async (req, res) => {
+  try {
+    const [u] = await getPool().query('SELECT email, role FROM users WHERE id = ?', [req.params.id]);
+    if (u.length > 0 && (u[0].email === 'admin@ramsun.com' || u[0].role === 'admin')) {
+      return res.status(400).json({ error: 'Cannot delete primary admin account' });
+    }
+    await getPool().query('DELETE FROM users WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
+app.post('/api/auth/users/bulk-delete', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'No user IDs provided' });
+    }
+    await getPool().query('DELETE FROM users WHERE id IN (?) AND email != "admin@ramsun.com" AND role != "admin"', [ids]);
+    res.json({ success: true, count: ids.length });
+  } catch (error) {
+    console.error('Failed to bulk delete users:', error);
+    res.status(500).json({ error: 'Failed to delete selected users' });
   }
 });
 

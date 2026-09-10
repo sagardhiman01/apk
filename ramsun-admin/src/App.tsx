@@ -1655,6 +1655,81 @@ function UsersPage() {
   const [codeToRevoke, setCodeToRevoke] = useState<string | null>(null);
   const [revoking, setRevoking] = useState(false);
 
+  // Registered Users Selection & Deletion State
+  const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
+  const [deletingUsers, setDeletingUsers] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<{ id: number; email: string } | null>(null);
+  const [bulkDeleteModal, setBulkDeleteModal] = useState(false);
+  const [userNotice, setUserNotice] = useState('');
+
+  const selectableUsers = users.filter(u => u.role !== 'admin' && u.email !== 'admin@ramsun.com');
+  const isAllSelected = selectableUsers.length > 0 && selectableUsers.every(u => selectedUserIds.includes(u.id));
+  const isSomeSelected = selectableUsers.some(u => selectedUserIds.includes(u.id)) && !isAllSelected;
+
+  const toggleSelectUser = (id: number) => {
+    setSelectedUserIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllToggle = () => {
+    if (isAllSelected) {
+      setSelectedUserIds([]);
+    } else {
+      setSelectedUserIds(selectableUsers.map(u => u.id));
+    }
+  };
+
+  const confirmSingleDelete = async () => {
+    if (!userToDelete) return;
+    setDeletingUsers(true);
+    try {
+      const res = await fetch(`${API}/users/${userToDelete.id}`, { method: 'DELETE' });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && d.success) {
+        setUserNotice(`Account "${userToDelete.email}" deleted successfully ✓`);
+        setTimeout(() => setUserNotice(''), 3500);
+        setSelectedUserIds(prev => prev.filter(id => id !== userToDelete.id));
+        setUserToDelete(null);
+        fetchUsers();
+      } else {
+        alert(d.error || 'Failed to delete user');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Failed to delete user. Please check connection.');
+    } finally {
+      setDeletingUsers(false);
+    }
+  };
+
+  const confirmBulkDelete = async () => {
+    if (selectedUserIds.length === 0) return;
+    setDeletingUsers(true);
+    try {
+      const res = await fetch(`${API}/users/bulk-delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedUserIds })
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && d.success) {
+        setUserNotice(`${selectedUserIds.length} user account(s) deleted successfully ✓`);
+        setTimeout(() => setUserNotice(''), 3500);
+        setSelectedUserIds([]);
+        setBulkDeleteModal(false);
+        fetchUsers();
+      } else {
+        alert(d.error || 'Failed to delete selected users');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Failed to delete selected users. Please check connection.');
+    } finally {
+      setDeletingUsers(false);
+    }
+  };
+
   const handleGenerate = async () => {
     if (!selectedRole) return;
     setGenerating(true);
@@ -1717,19 +1792,92 @@ function UsersPage() {
               <button
                 onClick={() => setCodeToRevoke(null)}
                 disabled={revoking}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl transition-colors"
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmRevoke}
                 disabled={revoking}
-                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-sm rounded-xl transition-colors shadow-md shadow-red-200 flex items-center justify-center gap-2"
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-sm rounded-xl transition-colors shadow-md shadow-red-200 flex items-center justify-center gap-2 cursor-pointer"
               >
                 {revoking ? 'Revoking...' : 'Yes, Revoke'}
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Single User Delete Modal */}
+      {userToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-100 text-center space-y-4" style={{animation:'slideUp .2s ease'}}>
+            <div className="w-12 h-12 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto text-2xl">
+              🗑️
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-slate-900">Delete Account</h3>
+              <p className="text-sm text-slate-500 mt-1">
+                Are you sure you want to delete user <span className="font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded break-all">{userToDelete.email}</span>? This account will permanently lose access.
+              </p>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setUserToDelete(null)}
+                disabled={deletingUsers}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmSingleDelete}
+                disabled={deletingUsers}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-sm rounded-xl transition-colors shadow-md shadow-red-200 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {deletingUsers ? 'Deleting...' : 'Yes, Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Modal */}
+      {bulkDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-100 text-center space-y-4" style={{animation:'slideUp .2s ease'}}>
+            <div className="w-12 h-12 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto text-2xl">
+              🗑️
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-slate-900">Delete Selected Accounts</h3>
+              <p className="text-sm text-slate-500 mt-1">
+                Are you sure you want to delete <span className="font-bold text-red-600">{selectedUserIds.length}</span> selected account(s)? This action cannot be undone.
+              </p>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setBulkDeleteModal(false)}
+                disabled={deletingUsers}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmBulkDelete}
+                disabled={deletingUsers}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-sm rounded-xl transition-colors shadow-md shadow-red-200 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {deletingUsers ? 'Deleting...' : `Yes, Delete All (${selectedUserIds.length})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Action Toast Notice */}
+      {userNotice && (
+        <div className="fixed top-20 right-4 z-50 flex items-center gap-2 bg-emerald-600 text-white text-sm font-semibold px-4 py-3 rounded-2xl shadow-2xl animate-in fade-in slide-in-from-top-3">
+          <span>✓</span> {userNotice}
         </div>
       )}
       
@@ -1801,9 +1949,39 @@ function UsersPage() {
 
       {/* Legacy Users Section */}
       <section>
-        <div className="mb-6">
-          <h2 className="text-lg font-black text-slate-800">Registered Accounts</h2>
-          <p className="text-slate-500 text-xs mt-1">Legacy email/password accounts</p>
+        <div className="mb-6 flex flex-col sm:flex-row justify-between sm:items-end gap-4">
+          <div>
+            <h2 className="text-lg font-black text-slate-800">Registered Accounts</h2>
+            <p className="text-slate-500 text-xs mt-1">
+              Legacy email/password accounts • {users.length} registered
+              {selectedUserIds.length > 0 && (
+                <span className="ml-2 font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                  {selectedUserIds.length} selected
+                </span>
+              )}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {selectedUserIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setBulkDeleteModal(true)}
+                disabled={deletingUsers}
+                className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>🗑️</span> Delete Selected ({selectedUserIds.length})
+              </button>
+            )}
+            {selectableUsers.length > 0 && (
+              <button
+                type="button"
+                onClick={handleSelectAllToggle}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs sm:text-sm px-3.5 py-2.5 rounded-xl transition-colors cursor-pointer"
+              >
+                {isAllSelected ? 'Deselect All' : 'Select All'}
+              </button>
+            )}
+          </div>
         </div>
         {loading ? (
           <div className="flex items-center justify-center py-12">
@@ -1814,23 +1992,74 @@ function UsersPage() {
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
             <table className="w-full text-sm">
-              <thead><tr className="bg-slate-50 border-b border-slate-100">
-                <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">#</th>
-                <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Email</th>
-                <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Role</th>
-                <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Joined</th>
-              </tr></thead>
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100">
+                  <th className="w-12 px-4 py-3 text-center">
+                    <input
+                      type="checkbox"
+                      checked={isAllSelected}
+                      ref={el => { if (el) el.indeterminate = isSomeSelected; }}
+                      onChange={handleSelectAllToggle}
+                      className="w-4 h-4 rounded text-yellow-500 focus:ring-yellow-400 border-slate-300 cursor-pointer accent-yellow-500"
+                      title="Select all accounts"
+                    />
+                  </th>
+                  <th className="text-left px-3 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">#</th>
+                  <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Email</th>
+                  <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Role</th>
+                  <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Joined</th>
+                  <th className="text-right px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Actions</th>
+                </tr>
+              </thead>
               <tbody>
-                {users.map((u, i) => (
-                  <tr key={u.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                    <td className="px-5 py-3 text-slate-400 font-mono text-xs">{i + 1}</td>
-                    <td className="px-5 py-3 font-semibold text-slate-700">{u.email}</td>
-                    <td className="px-5 py-3">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${u.role === 'admin' ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-700'}`}>{u.role || 'employee'}</span>
-                    </td>
-                    <td className="px-5 py-3 text-slate-400 text-xs">{u.created_at ? new Date(u.created_at).toLocaleDateString('en-IN') : '—'}</td>
-                  </tr>
-                ))}
+                {users.map((u, i) => {
+                  const isProtected = u.role === 'admin' || u.email === 'admin@ramsun.com';
+                  const isSelected = selectedUserIds.includes(u.id);
+                  return (
+                    <tr
+                      key={u.id}
+                      className={`border-b border-slate-50 transition-colors ${
+                        isSelected ? 'bg-amber-50/70 hover:bg-amber-50' : 'hover:bg-slate-50'
+                      }`}
+                    >
+                      <td className="w-12 px-4 py-3 text-center">
+                        {isProtected ? (
+                          <span title="Primary Admin account cannot be deleted" className="text-xs opacity-40 cursor-not-allowed select-none">
+                            🔒
+                          </span>
+                        ) : (
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectUser(u.id)}
+                            className="w-4 h-4 rounded text-yellow-500 focus:ring-yellow-400 border-slate-300 cursor-pointer accent-yellow-500"
+                          />
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-slate-400 font-mono text-xs">{i + 1}</td>
+                      <td className="px-5 py-3 font-semibold text-slate-700">{u.email}</td>
+                      <td className="px-5 py-3">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${u.role === 'admin' ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-700'}`}>
+                          {u.role || 'employee'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-slate-400 text-xs">{u.created_at ? new Date(u.created_at).toLocaleDateString('en-IN') : '—'}</td>
+                      <td className="px-5 py-3 text-right">
+                        {isProtected ? (
+                          <span className="text-xs font-semibold text-slate-400 px-2 py-1 select-none">Protected</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setUserToDelete({ id: u.id, email: u.email })}
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50 px-2.5 py-1 rounded transition-colors text-xs font-bold cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
