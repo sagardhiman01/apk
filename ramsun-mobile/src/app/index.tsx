@@ -869,7 +869,7 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
 }
 
 // ─── NEW PROJECT MODAL (2 Steps) ──────────────────────────────────────────────
-function NewProjectModal({ visible, onClose, onSuccess }: { visible: boolean; onClose: () => void; onSuccess: () => void }) {
+function NewProjectModal({ visible, userId, onClose, onSuccess }: { visible: boolean; userId?: string | null; onClose: () => void; onSuccess: () => void }) {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState({ customer_name: '', phone: '', email: '', address: '', capacity: '', site_photo: null as any, site_location: '', agreement: null as any, quotation: null as any });
@@ -972,7 +972,12 @@ function NewProjectModal({ visible, onClose, onSuccess }: { visible: boolean; on
         if (!quotation) throw new Error('Failed to upload Quotation PDF to server. Please try again.');
       }
 
-      const userId = await AsyncStorage.getItem('ramsun_user_id').catch(() => null);
+      const storedUid = await AsyncStorage.getItem('ramsun_user_id').catch(() => null);
+      const activeUid = userId || storedUid;
+      if (!activeUid) {
+        Alert.alert('Session Expired', 'Please log out and log in again to create a project.');
+        return;
+      }
 
       const res = await fetch(`${API_URL}/projects`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -986,7 +991,7 @@ function NewProjectModal({ visible, onClose, onSuccess }: { visible: boolean; on
           site_location: data.site_location.trim(),
           agreement,
           quotation,
-          user_id: userId ? parseInt(userId) : null,
+          user_id: parseInt(activeUid),
         }),
       });
       if (!res.ok) { const j = await res.json(); throw new Error(j.error || 'Failed'); }
@@ -1161,7 +1166,7 @@ function ProjectCard({ project, onPress, index }: { project: any; onPress: () =>
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function DashboardScreen({ role, onLogout }: { role: string; onLogout: () => void }) {
+function DashboardScreen({ role, userId, onLogout }: { role: string; userId?: string | null; onLogout: () => void }) {
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1194,25 +1199,34 @@ function DashboardScreen({ role, onLogout }: { role: string; onLogout: () => voi
   const load = useCallback(async () => {
     setRefreshing(true);
     try {
-      const userId = await AsyncStorage.getItem('ramsun_user_id').catch(() => null);
+      const storedUid = await AsyncStorage.getItem('ramsun_user_id').catch(() => null);
+      const activeUid = userId || storedUid;
       let query = '';
-      if (role === 'client' && userId) {
-        query = `?user_id=${userId}`;
-      } else if (role && role !== 'admin') {
-        query = `?role=${role}`;
+      if (role !== 'admin') {
+        if (activeUid) {
+          query = `?user_id=${activeUid}&role=${role || 'employee'}`;
+        } else {
+          query = `?role=${role || 'employee'}`;
+        }
       }
       const r = await fetch(`${API_URL}/projects${query}`);
       if (!r.ok) throw new Error();
       setProjects(await r.json());
     } catch { }
     finally { setLoading(false); setRefreshing(false); }
-  }, [role]);
+  }, [role, userId]);
 
   const refreshProjectDetail = async () => {
     await load();
     if (selected) {
       try {
-        const r = await fetch(`${API_URL}/projects`);
+        const storedUid = await AsyncStorage.getItem('ramsun_user_id').catch(() => null);
+        const activeUid = userId || storedUid;
+        let query = '';
+        if (role !== 'admin' && activeUid) {
+          query = `?user_id=${activeUid}&role=${role || 'employee'}`;
+        }
+        const r = await fetch(`${API_URL}/projects${query}`);
         if (r.ok) {
           const list = await r.json();
           const updated = list.find((p: any) => p.id === selected.id);
@@ -1366,13 +1380,13 @@ function DashboardScreen({ role, onLogout }: { role: string; onLogout: () => voi
       {selected && (
         <ProjectDetailModal project={selected} role={role} visible={!!selected} onClose={() => setSelected(null)} onUpdateStep={updateStep} onRefresh={refreshProjectDetail} />
       )}
-      <NewProjectModal visible={newModal} onClose={() => setNewModal(false)} onSuccess={() => { load(); showToast('Project created successfully! 🎉'); }} />
+      <NewProjectModal visible={newModal} userId={userId} onClose={() => setNewModal(false)} onSuccess={() => { load(); showToast('Project created successfully! 🎉'); }} />
     </SafeAreaView>
   );
 }
 
 // ─── LOGIN SCREEN ─────────────────────────────────────────────────────────────
-function LoginScreen({ onLogin }: { onLogin: (role: string) => void }) {
+function LoginScreen({ onLogin }: { onLogin: (role: string, userId?: string | number) => void }) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [phase, setPhase] = useState<'form' | 'otp'>('form');
   const [email, setEmail] = useState('');
@@ -1416,10 +1430,11 @@ function LoginScreen({ onLogin }: { onLogin: (role: string) => void }) {
         const d = await r.json();
         if (d.success) {
           // Save user_id for tenant isolation
-          if (d.user?.id) {
-            await AsyncStorage.setItem('ramsun_user_id', String(d.user.id)).catch(() => {});
+          const uid = d.user?.id || d.user?.user_id;
+          if (uid) {
+            await AsyncStorage.setItem('ramsun_user_id', String(uid)).catch(() => {});
           }
-          onLogin(d.user?.role || 'employee');
+          onLogin(d.user?.role || 'employee', uid);
         }
         else setError(d.message || 'Invalid credentials. Try again.');
       } else {
@@ -1446,10 +1461,11 @@ function LoginScreen({ onLogin }: { onLogin: (role: string) => void }) {
       const r = await fetch(`${API_URL}/auth/verify-register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim().toLowerCase(), otp }), signal: controller.signal });
       const d = await r.json();
       if (d.success) {
-        if (d.user?.id) {
-          await AsyncStorage.setItem('ramsun_user_id', String(d.user.id)).catch(() => {});
+        const uid = d.user?.id || d.user?.user_id;
+        if (uid) {
+          await AsyncStorage.setItem('ramsun_user_id', String(uid)).catch(() => {});
         }
-        onLogin(d.user?.role || 'employee');
+        onLogin(d.user?.role || 'employee', uid);
       }
       else setError(d.message || 'Invalid OTP. Please try again.');
     } catch (e: any) {
@@ -1571,16 +1587,39 @@ function LoginScreen({ onLogin }: { onLogin: (role: string) => void }) {
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [role, setRole] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    AsyncStorage.getItem('ramsun_user_role')
-      .then(r => { setRole(r); setChecking(false); })
+    Promise.all([
+      AsyncStorage.getItem('ramsun_user_role'),
+      AsyncStorage.getItem('ramsun_user_id'),
+    ])
+      .then(([r, uId]) => {
+        if (r && uId) {
+          setRole(r);
+          setUserId(uId);
+        } else if (r === 'admin') {
+          setRole(r);
+          setUserId(uId);
+        } else {
+          // If employee role is stored but user_id is missing, force a clean login so user_id is properly established
+          AsyncStorage.removeItem('ramsun_user_role').catch(() => {});
+          AsyncStorage.removeItem('ramsun_user_id').catch(() => {});
+          setRole(null);
+          setUserId(null);
+        }
+        setChecking(false);
+      })
       .catch(() => setChecking(false));
   }, []);
 
-  const handleLogin = async (r: string) => {
+  const handleLogin = async (r: string, uId?: string | number) => {
     await AsyncStorage.setItem('ramsun_user_role', r).catch(() => { });
+    if (uId) {
+      await AsyncStorage.setItem('ramsun_user_id', String(uId)).catch(() => { });
+      setUserId(String(uId));
+    }
     setRole(r);
   };
 
@@ -1588,6 +1627,7 @@ export default function App() {
     await AsyncStorage.removeItem('ramsun_user_role').catch(() => {});
     await AsyncStorage.removeItem('ramsun_user_id').catch(() => {});
     setRole(null);
+    setUserId(null);
   };
 
   if (checking) {
@@ -1600,6 +1640,6 @@ export default function App() {
   }
 
   return role
-    ? <DashboardScreen role={role} onLogout={handleLogout} />
+    ? <DashboardScreen role={role} userId={userId} onLogout={handleLogout} />
     : <LoginScreen onLogin={handleLogin} />;
 }

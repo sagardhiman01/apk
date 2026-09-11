@@ -414,31 +414,39 @@ app.post('/api/auth/users/bulk-delete', async (req, res) => {
 app.get('/api/projects', async (req, res) => {
   try {
     const { search, status, user_id } = req.query;
+    const role = req.query.role;
     let query = 'SELECT * FROM projects WHERE 1=1';
     let params = [];
 
-    // TENANT ISOLATION (For normal clients)
-    if (user_id) {
+    // TENANT ISOLATION (For Mobile Employee / Client)
+    if (role === 'employee' || role === 'client') {
+      if (user_id) {
+        query += ' AND user_id = ?';
+        params.push(parseInt(user_id));
+      } else {
+        // Strict isolation: if an employee or client has no user_id, NEVER leak other users' projects
+        query += ' AND 1=0';
+      }
+    } else if (user_id) {
       query += ' AND user_id = ?';
       params.push(parseInt(user_id));
     }
     
-    const role = req.query.role;
-    // ROLE-BASED FILTERING (For Department Queues)
-    if (role && role !== 'admin') {
+    // ROLE-BASED FILTERING (For Department Queues in Admin Panel)
+    if (role && role !== 'admin' && role !== 'employee' && role !== 'client') {
         if (role === 'bo_registration' || role === 'registration') {
           query += ' AND step = 1 AND (status NOT LIKE "%UPCL%" AND (needs_upcl IS NULL OR needs_upcl = 0))';
         } else if (role === 'bo_upcl' || role === 'upcl') {
           query += ' AND step = 1 AND (status LIKE "%UPCL%" OR needs_upcl = 1)';
         }
         else if (role === 'bo_quotation' || role === 'quotation') { query += ' AND step = 2'; }
-       else if (role === 'bo_agreement' || role === 'agreement') { query += ' AND step = 3'; }
-       else if (role === 'bo_loan' || role === 'loan') { query += ' AND step = 4'; }
-       else if (role === 'bank') { query += ' AND step IN (5, 8)'; } // Bank handles 1st and 2nd disbursed
-       else if (role === 'store' || role === 'dispatch') { query += ' AND step = 6'; }
-       else if (role === 'installation') { query += ' AND step = 7'; }
-       else if (role === 'bo_upload_inst' || role === 'upload_inst') { query += ' AND step = 9'; }
-       else if (role === 'bo_subsidy' || role === 'subsidy') { query += ' AND step = 10'; }
+        else if (role === 'bo_agreement' || role === 'agreement') { query += ' AND step = 3'; }
+        else if (role === 'bo_loan' || role === 'loan') { query += ' AND step = 4'; }
+        else if (role === 'bank') { query += ' AND step IN (5, 8)'; } // Bank handles 1st and 2nd disbursed
+        else if (role === 'store' || role === 'dispatch') { query += ' AND step = 6'; }
+        else if (role === 'installation') { query += ' AND step = 7'; }
+        else if (role === 'bo_upload_inst' || role === 'upload_inst') { query += ' AND step = 9'; }
+        else if (role === 'bo_subsidy' || role === 'subsidy') { query += ' AND step = 10'; }
     }
 
     if (search) {
@@ -796,7 +804,7 @@ app.post('/api/auth/verify-register', authLimiter, async (req, res) => {
     res.json({ 
       success: true, 
       message: 'Registration successful',
-      user: { id: result.insertId, email, role: defaultRole }
+      user: { id: result.insertId, email, role: defaultRole, user_id: result.insertId }
     });
   } catch (error) {
     console.error('Error verifying registration OTP:', error.message);
