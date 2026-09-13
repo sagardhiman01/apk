@@ -419,17 +419,18 @@ app.get('/api/projects', async (req, res) => {
     let params = [];
 
     // TENANT ISOLATION (For Mobile Employee / Client)
-    if (role === 'employee' || role === 'client') {
-      if (user_id) {
-        query += ' AND user_id = ?';
-        params.push(parseInt(user_id));
-      } else {
-        // Strict isolation: if an employee or client has no user_id, NEVER leak other users' projects
-        query += ' AND 1=0';
+    if (user_id) {
+      const parsedUid = parseInt(user_id);
+      // Validate that user still exists in users table
+      const [uCheck] = await getPool().query('SELECT id FROM users WHERE id = ?', [parsedUid]);
+      if (uCheck.length === 0) {
+        return res.status(401).json({ error: 'Account has been removed or deactivated', revoked: true });
       }
-    } else if (user_id) {
       query += ' AND user_id = ?';
-      params.push(parseInt(user_id));
+      params.push(parsedUid);
+    } else if (role === 'employee' || role === 'client') {
+      // Strict isolation: if an employee or client has no user_id, NEVER leak other users' projects
+      query += ' AND 1=0';
     }
     
     // ROLE-BASED FILTERING (For Department Queues in Admin Panel)
@@ -454,8 +455,15 @@ app.get('/api/projects', async (req, res) => {
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
     if (status) {
-      query += ' AND status = ?';
-      params.push(status);
+      const s = status.trim();
+      if (s === 'Document Upload' || s === 'Registration') {
+        query += ' AND (status LIKE "%Document%" OR status LIKE "%Registration%" OR step = 1) AND (status NOT LIKE "%UPCL%" AND (needs_upcl IS NULL OR needs_upcl = 0))';
+      } else if (s === 'UPCL' || s.includes('UPCL')) {
+        query += ' AND (status LIKE "%UPCL%" OR needs_upcl = 1)';
+      } else {
+        query += ' AND (status LIKE ? OR status = ?)';
+        params.push(`%${s}%`, s);
+      }
     }
     query += ' ORDER BY created_at DESC';
     const [rows] = await getPool().query(query, params);
@@ -478,6 +486,13 @@ app.post('/api/projects', async (req, res) => {
     const agreement = req.body.agreement || null;
     const quotation = req.body.quotation || null;
     const user_id = req.body.user_id ? parseInt(req.body.user_id) : null;
+
+    if (user_id) {
+      const [uCheck] = await getPool().query('SELECT id FROM users WHERE id = ?', [user_id]);
+      if (uCheck.length === 0) {
+        return res.status(401).json({ error: 'Account has been removed or deactivated', revoked: true });
+      }
+    }
 
     const errors = [];
     if (!customer_name || customer_name.length < 2) errors.push('Customer name is required (min 2 chars)');
@@ -767,6 +782,22 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
   } catch (error) {
     console.error('Error in register/send-otp:', error);
     res.status(500).json({ success: false, message: 'Failed to send OTP. Please check your email credentials or network connection.' });
+  }
+});
+
+// Validate user existence (for APK real-time session verification)
+app.get('/api/auth/validate', async (req, res) => {
+  try {
+    const user_id = req.query.user_id ? parseInt(req.query.user_id) : null;
+    if (!user_id) return res.status(400).json({ valid: false, error: 'User ID required' });
+    const [users] = await getPool().query('SELECT id, email, role FROM users WHERE id = ?', [user_id]);
+    if (users.length === 0) {
+      return res.status(401).json({ valid: false, error: 'Account has been removed or revoked', revoked: true });
+    }
+    res.json({ valid: true, user: users[0] });
+  } catch (error) {
+    console.error('Validate error:', error.message);
+    res.status(500).json({ error: 'Validation failed' });
   }
 });
 

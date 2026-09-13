@@ -994,7 +994,13 @@ function NewProjectModal({ visible, userId, onClose, onSuccess }: { visible: boo
           user_id: parseInt(activeUid),
         }),
       });
-      if (!res.ok) { const j = await res.json(); throw new Error(j.error || 'Failed'); }
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          throw new Error('Your account has been removed by the administrator.');
+        }
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || 'Failed to create project');
+      }
       onSuccess();
       close();
     } catch (err: any) {
@@ -1210,11 +1216,16 @@ function DashboardScreen({ role, userId, onLogout }: { role: string; userId?: st
         }
       }
       const r = await fetch(`${API_URL}/projects${query}`);
+      if (r.status === 401 || r.status === 403) {
+        Alert.alert('Session Expired', 'Your account has been removed by the administrator.');
+        onLogout();
+        return;
+      }
       if (!r.ok) throw new Error();
       setProjects(await r.json());
     } catch { }
     finally { setLoading(false); setRefreshing(false); }
-  }, [role, userId]);
+  }, [role, userId, onLogout]);
 
   const refreshProjectDetail = async () => {
     await load();
@@ -1227,6 +1238,11 @@ function DashboardScreen({ role, userId, onLogout }: { role: string; userId?: st
           query = `?user_id=${activeUid}&role=${role || 'employee'}`;
         }
         const r = await fetch(`${API_URL}/projects${query}`);
+        if (r.status === 401 || r.status === 403) {
+          Alert.alert('Session Expired', 'Your account has been removed by the administrator.');
+          onLogout();
+          return;
+        }
         if (r.ok) {
           const list = await r.json();
           const updated = list.find((p: any) => p.id === selected.id);
@@ -1237,6 +1253,27 @@ function DashboardScreen({ role, userId, onLogout }: { role: string; userId?: st
   };
 
   useEffect(() => { load(); }, [load]);
+
+  // Real-time session validation: auto-signout within 15 seconds if admin deletes account
+  useEffect(() => {
+    if (role === 'admin') return;
+    const interval = setInterval(async () => {
+      try {
+        const storedUid = await AsyncStorage.getItem('ramsun_user_id').catch(() => null);
+        const activeUid = userId || storedUid;
+        if (!activeUid) return;
+        const res = await fetch(`${API_URL}/auth/validate?user_id=${activeUid}`);
+        if (res.status === 401 || res.status === 403 || res.status === 404) {
+          clearInterval(interval);
+          Alert.alert('Session Expired', 'Your account has been removed by the administrator.');
+          onLogout();
+        }
+      } catch (e) {
+        // Network offline: ignore
+      }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [role, userId, onLogout]);
 
   const updateStep = async (id: number, step: number, status: string) => {
     try {
@@ -1595,8 +1632,27 @@ export default function App() {
       AsyncStorage.getItem('ramsun_user_role'),
       AsyncStorage.getItem('ramsun_user_id'),
     ])
-      .then(([r, uId]) => {
+      .then(async ([r, uId]) => {
         if (r && uId) {
+          if (r !== 'admin') {
+            try {
+              const controller = new AbortController();
+              const timeout = setTimeout(() => controller.abort(), 6000);
+              const vRes = await fetch(`${API_URL}/auth/validate?user_id=${uId}`, { signal: controller.signal });
+              clearTimeout(timeout);
+              if (vRes.status === 401 || vRes.status === 403 || vRes.status === 404) {
+                // Account removed by admin! Purge local state
+                await AsyncStorage.removeItem('ramsun_user_role').catch(() => {});
+                await AsyncStorage.removeItem('ramsun_user_id').catch(() => {});
+                setRole(null);
+                setUserId(null);
+                setChecking(false);
+                return;
+              }
+            } catch (e) {
+              // Network timeout or offline: allow proceeding
+            }
+          }
           setRole(r);
           setUserId(uId);
         } else if (r === 'admin') {

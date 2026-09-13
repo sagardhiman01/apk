@@ -1188,20 +1188,33 @@ function Dashboard({ user }: { user?: any }) {
     const curStep = p.step ?? 1;
     const isUpcl = p.status?.includes('UPCL') || p.needs_upcl || p.transferred_by === 'upcl';
     switch (loc.pathname) {
-      case '/upcl':         return curStep === 1 && isUpcl;
-      case '/registration': return curStep === 1 && !isUpcl;
-      case '/quotation':    return curStep === 2;
-      case '/agreement':    return curStep === 3;
-      case '/loan':         return curStep === 4;
+      case '/upcl':         if (!(curStep === 1 && isUpcl)) return false; break;
+      case '/registration': if (!(curStep === 1 && !isUpcl)) return false; break;
+      case '/quotation':    if (curStep !== 2) return false; break;
+      case '/agreement':    if (curStep !== 3) return false; break;
+      case '/loan':         if (curStep !== 4) return false; break;
       case '/bank':
-      case '/loan-disbursed': return curStep === 5;
+      case '/loan-disbursed': if (curStep !== 5) return false; break;
       case '/dispatch':
-      case '/store':        return curStep === 6;
-      case '/installation': return curStep === 7;
-      case '/upload-inst':  return curStep === 9;
-      case '/subsidy':      return curStep === 10;
-      default: return true; // '/projects' or '/'
+      case '/store':        if (curStep !== 6) return false; break;
+      case '/installation': if (curStep !== 7) return false; break;
+      case '/upload-inst':  if (curStep !== 9) return false; break;
+      case '/subsidy':      if (curStep !== 10) return false; break;
+      default: break; // '/projects' or '/'
     }
+
+    if (filter) {
+      const f = filter.toLowerCase();
+      const s = (p.status || '').toLowerCase();
+      if (f === 'document upload' || f === 'registration') {
+        return (s.includes('document upload') || s.includes('registration') || curStep === 1) && !isUpcl;
+      }
+      if (f === 'upcl') {
+        return isUpcl || s.includes('upcl');
+      }
+      return s.includes(f);
+    }
+    return true;
   });
 
   const pageInfo = Object.values(ROLE_PAGES).find(p => p.to === loc.pathname);
@@ -1209,8 +1222,7 @@ function Dashboard({ user }: { user?: any }) {
   const pageDesc = pageInfo ? `Manage and process projects in ${pageInfo.label} queue` : 'Ramsun Solar · Project Management Dashboard';
 
   const done = displayProjects.filter(p => (p.step ?? 0) >= 10).length;
-  const pending = displayProjects.filter(p => !p.step || p.step <= 1).length;
-  const inProcess = displayProjects.filter(p => (p.step ?? 0) > 1 && (p.step ?? 0) < 10).length;
+  const inProcess = displayProjects.filter(p => (p.step ?? 0) < 10).length;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-full">
@@ -1267,19 +1279,20 @@ function Dashboard({ user }: { user?: any }) {
           />
           <select
             value={filter}
-            onChange={e => { setFilter(e.target.value); setTimeout(load, 0); }}
+            onChange={e => setFilter(e.target.value)}
             className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 w-full sm:w-auto"
           >
             <option value="">All Statuses</option>
-            <option value="Registration">Registration (BO)</option>
-            <option value="Quotation + Sign">Quotation + Sign (BO)</option>
+            <option value="Registration">Document Upload / Registration</option>
+            <option value="UPCL">UPCL Process</option>
+            <option value="Quotation">Quotation + Sign (BO)</option>
             <option value="Agreement">Agreement (BO)</option>
             <option value="Loan Apply">Loan Apply (BO)</option>
             <option value="Loan Disbursed">Loan Disbursed (Bank)</option>
             <option value="Material Dispatch">Material Dispatch (Store)</option>
             <option value="Complete Installation">Complete Installation</option>
             <option value="Second Disbursed">Second Disbursed (Bank)</option>
-            <option value="Upload Inst. (DCR)">Upload Inst. (DCR) (BO)</option>
+            <option value="Upload Inst">Upload Inst. (DCR) (BO)</option>
             <option value="Subsidy Redeem">Subsidy Redeem (BO)</option>
           </select>
           <button
@@ -1292,12 +1305,11 @@ function Dashboard({ user }: { user?: any }) {
         </div>
       </div>
 
-      {/* Stat cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
-        <StatCard label="Total Projects"    value={displayProjects.length} sub="+8%" gradient="bg-gradient-to-br from-blue-500 to-indigo-700"   icon={<Icons.Briefcase />} />
-        <StatCard label="Pending Approval"  value={pending}         sub="+3"  gradient="bg-gradient-to-br from-orange-400 to-rose-600"   icon={<Icons.Zap />} />
-        <StatCard label="In Progress"       value={inProcess}       sub="→"   gradient="bg-gradient-to-br from-violet-500 to-purple-700" icon={<Icons.CreditCard />} />
-        <StatCard label="Completed"         value={done}            sub="+5"  gradient="bg-gradient-to-br from-emerald-400 to-teal-600"  icon={<Icons.Check />} />
+      {/* Stat cards - 3 cards: Total Projects, In Progress, Completed */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
+        <StatCard label="Total Projects" value={displayProjects.length} sub="+8%" gradient="bg-gradient-to-br from-blue-500 to-indigo-700"   icon={<Icons.Briefcase />} />
+        <StatCard label="In Progress"    value={inProcess}              sub="Active" gradient="bg-gradient-to-br from-orange-400 to-rose-600"   icon={<Icons.Zap />} />
+        <StatCard label="Completed"      value={done}                   sub="+5"  gradient="bg-gradient-to-br from-emerald-400 to-teal-600"  icon={<Icons.Check />} />
       </div>
 
       {/* Table card */}
