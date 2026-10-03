@@ -1,0 +1,42 @@
+[
+  {
+    "code": "4Y6AOIAP",
+    "role": "bo_quotation",
+    "created_at": "2026-10-03T07:17:28.439Z"
+  },
+  {
+    "code": "G303GLXX",
+    "role": "bo_registration",
+    "created_at": "2026-10-01T18:09:16.026Z"
+  },
+  {
+    "code": "PNW6IN07",
+    "role": "installation",
+    "created_at": "2026-10-01T18:07:35.284Z"
+  },
+  {
+    "code": "VIWONON8",
+    "role": "store",
+    "created_at": "2026-10-01T18:07:22.888Z"
+  },
+  {
+    "code": "Q4L25ZXE",
+    "role": "bank",
+    "created_at": "2026-10-01T18:07:22.888Z"
+  },
+  {
+    "code": "Z5OBN70G",
+    "role": "upcl",
+    "created_at": "2026-10-01T18:07:22.888Z"
+  },
+  {
+    "code": "CS1N798R",
+    "role": "bo_registration",
+    "created_at": "2026-10-01T18:07:22.888Z"
+  },
+  {
+    "code": "RAMSUN01",
+    "role": "installation",
+    "created_at": "2026-10-01T18:07:22.888Z"
+  }
+]

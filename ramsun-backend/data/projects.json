@@ -1,0 +1,23 @@
+[
+  {
+    "id": 805466,
+    "user_id": 44138,
+    "client_id": "15713993",
+    "customer_name": "sagar",
+    "phone": "7017708827",
+    "email": "sagardhiman45605@gmail.com",
+    "address": "",
+    "capacity": "",
+    "status": "Quotation + Sign",
+    "step": 2,
+    "site_photo": "/uploads/1790878805417-WhatsApp_Image_2026-09-30_at_22.00.34.jpeg",
+    "site_location": "safasdfawer",
+    "agreement": "/uploads/1790878805428-WhatsApp_Image_2026-09-30_at_21.48.53.jpeg",
+    "quotation": "/uploads/1790878805436-WhatsApp_Image_2026-09-30_at_22.00.34.jpeg",
+    "loan_approved": 0,
+    "created_at": "2026-10-01T18:20:05.466Z",
+    "failed_document": null,
+    "rejection_reason": null,
+    "needs_upcl": 0
+  }
+]

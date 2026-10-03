@@ -52,6 +52,47 @@ const C = {
 const isEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 const isPhone = (p: string) => { const d = p.replace(/\D/g, ''); return d.length >= 10 && d.length <= 15; };
 
+// ─── Team Roles & Departments ────────────────────────────────────────────────
+const ROLE_ALLOWED_STEPS: Record<string, number[]> = {
+  upcl:            [1],
+  bo_registration: [1],
+  bo_quotation:    [2],
+  bo_agreement:    [3],
+  bo_loan:         [4],
+  bank:            [5, 8],
+  store:           [6],
+  installation:    [7],
+  bo_upload_inst:  [9],
+  bo_subsidy:      [10],
+};
+
+const DEPARTMENT_CONFIG: Record<string, { label: string; icon: string; color: string; desc: string; step: number }> = {
+  upcl:            { label: 'UPCL Verification',         icon: 'flash',          color: '#4A9EFF', desc: 'Electricity Bill & Meter Discrepancy', step: 1 },
+  bo_registration: { label: 'Registration (BO)',         icon: 'document-text',  color: '#F0A500', desc: 'Files Login & Document Verification', step: 1 },
+  bo_quotation:    { label: 'Quotation + Sign (BO)',     icon: 'create',         color: '#FFB703', desc: 'Quotation & Upload Signed Document', step: 2 },
+  bo_agreement:    { label: 'Agreement (BO)',            icon: 'document-attach', color: '#9B72FF', desc: 'Upload Signed Solar Agreement', step: 3 },
+  bo_loan:         { label: 'Loan Apply (BO)',           icon: 'business',       color: '#2ECC71', desc: 'Solar Loan Application Submission', step: 4 },
+  bank:            { label: 'Loan Disbursed (Bank)',     icon: 'cash',           color: '#06D6A0', desc: 'Tranche Disbursement & Remarks', step: 5 },
+  store:           { label: 'Material Dispatch (Store)', icon: 'cube',           color: '#FB8500', desc: 'Dispatch Materials to Installation Site', step: 6 },
+  installation:    { label: 'Installation Team',         icon: 'construct',      color: '#E63946', desc: 'Panels & Inverter with Geotag Photos', step: 7 },
+  bo_upload_inst:  { label: 'Upload Inst. (DCR) (BO)',   icon: 'cloud-upload',   color: '#7209B7', desc: 'Upload Installation & DCR Certificate', step: 9 },
+  bo_subsidy:      { label: 'Subsidy Redeem (BO)',       icon: 'gift',           color: '#3A86FF', desc: 'Government Subsidy Claim & Release', step: 10 },
+};
+
+const TRANSFER_DESTINATIONS = [
+  { key: 'step_1_reg', id: 1, is_upcl: false, status: 'Registration', desc: 'Files login & details review', dept: 'Registration (BO)' },
+  { key: 'step_1_upcl', id: 1, is_upcl: true, status: 'UPCL Verification', desc: 'Electricity Bill / Name / Meter Issue', dept: 'UPCL Department' },
+  { key: 'step_2', id: 2, is_upcl: false, status: 'Quotation + Sign', desc: 'Quotation + upload sign document', dept: 'Quotation (BO)' },
+  { key: 'step_3', id: 3, is_upcl: false, status: 'Agreement', desc: 'Upload agreement + quotation', dept: 'Agreement (BO)' },
+  { key: 'step_4', id: 4, is_upcl: false, status: 'Loan Apply', desc: 'Loan apply submitted', dept: 'Loan Apply (BO)' },
+  { key: 'step_5', id: 5, is_upcl: false, status: 'Loan Disbursed', desc: 'Loan disbursed (or tag with remark)', dept: 'Bank (1st Disbursed)' },
+  { key: 'step_6', id: 6, is_upcl: false, status: 'Material Dispatch', desc: 'Materials dispatched to site', dept: 'Store / Dispatch' },
+  { key: 'step_7', id: 7, is_upcl: false, status: 'Complete Installation', desc: 'Panel & Inverter # with Geotag photo', dept: 'Installation' },
+  { key: 'step_8', id: 8, is_upcl: false, status: 'Second Disbursed', desc: 'Second loan amount disbursed', dept: 'Bank (2nd Disbursed)' },
+  { key: 'step_9', id: 9, is_upcl: false, status: 'Upload Inst. (DCR)', desc: 'Upload installation with DCR', dept: 'Upload Inst. (BO)' },
+  { key: 'step_10', id: 10, is_upcl: false, status: 'Subsidy Redeem', desc: 'Subsidy claimed and redeemed', dept: 'Subsidy Redeem (BO)' },
+];
+
 // ─── Floating Particle ────────────────────────────────────────────────────────
 function FloatingParticle({ x, delay, color, size = 2 }: { x: number; delay: number; color: string; size?: number }) {
   const y = useRef(new Animated.Value(H)).current;
@@ -295,11 +336,186 @@ function UPCLWaiting({ project, onClose }: { project: any; onClose: () => void }
   );
 }
 
-// ─── PROJECT DETAIL MODAL (Customer Facing) ──────────────────────────────────
-function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onRefresh }: {
+// ─── TRANSFER PROJECT MODAL ──────────────────────────────────────────────────
+function TransferProjectModal({ visible, project, currentRole, onClose, onSuccess }: {
+  visible: boolean;
+  project: any;
+  currentRole: string;
+  onClose: () => void;
+  onSuccess: (msg: string) => void;
+}) {
+  const cur = parseInt(project?.step || 1);
+  const isCurrentUpcl = (cur === 1) && (project?.needs_upcl == 1 || project?.needs_upcl === true || String(project?.status || '').toUpperCase().includes('UPCL'));
+  const currentKey = isCurrentUpcl ? 'step_1_upcl' : (cur === 1 ? 'step_1_reg' : `step_${cur}`);
+
+  // Exclude current section / role so staff cannot transfer to the same section they are in
+  const availableDestinations = TRANSFER_DESTINATIONS.filter(d => {
+    // 1. Never show the current step of the project
+    if (d.key === currentKey) return false;
+    // 2. Also check if the active role corresponds to this step
+    const r = String(currentRole || '').toLowerCase();
+    if ((r === 'bo_registration' || r === 'registration') && d.key === 'step_1_reg') return false;
+    if ((r === 'upcl' || r === 'bo_upcl') && d.key === 'step_1_upcl') return false;
+    if ((r === 'bo_quotation' || r === 'quotation') && d.key === 'step_2') return false;
+    if ((r === 'bo_agreement' || r === 'agreement') && d.key === 'step_3') return false;
+    if ((r === 'bo_loan' || r === 'loan') && d.key === 'step_4') return false;
+    if ((r === 'store' || r === 'dispatch') && d.key === 'step_6') return false;
+    if (r === 'installation' && d.key === 'step_7') return false;
+    if ((r === 'bo_upload_inst' || r === 'upload_inst') && d.key === 'step_9') return false;
+    if ((r === 'bo_subsidy' || r === 'subsidy') && d.key === 'step_10') return false;
+    return true;
+  });
+
+  const [selectedKey, setSelectedKey] = useState<string>('');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (visible && availableDestinations.length > 0) {
+      // Pick next logical step if available (e.g. if current is step 2, default to step 3)
+      const nextStepKey = cur < 10 ? `step_${cur + 1}` : 'step_1_reg';
+      const defaultDest = availableDestinations.find(d => d.key === nextStepKey) || availableDestinations[0];
+      setSelectedKey(defaultDest ? defaultDest.key : '');
+      setReason('');
+    }
+  }, [visible, project?.id, project?.step, project?.status, currentRole]);
+
+  const target = availableDestinations.find(d => d.key === selectedKey) || availableDestinations[0] || TRANSFER_DESTINATIONS[0];
+
+  const handleTransfer = async () => {
+    if (!reason.trim()) {
+      Alert.alert('Required', 'Please enter a reason or note for transferring this project.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch(`${API_URL}/projects/${project.id}/transfer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to_step: target.id,
+          status: target.status,
+          is_upcl: target.is_upcl,
+          reason: reason.trim(),
+          transferred_by: currentRole || 'Worker',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Transfer failed');
+      onSuccess(`Project #${project.id} transferred to "${target.status}" (${target.dept}) ✓`);
+      onClose();
+    } catch (e: any) {
+      Alert.alert('Transfer Error', e?.message || 'Failed to transfer project. Check connection.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' }}>
+        <View style={{ backgroundColor: C.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, maxHeight: '92%', borderWidth: 1, borderColor: C.borderHi }}>
+          {/* Header */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <View>
+              <Text style={{ color: C.gold, fontSize: 11, fontWeight: '800', letterSpacing: 1.5 }}>TRANSFER WORKFLOW</Text>
+              <Text style={{ color: C.text, fontSize: 18, fontWeight: '900' }}>Project #{project?.client_id || project?.id}</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ color: C.text2, fontSize: 16 }}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Current Location Badge */}
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+            backgroundColor: '#f59e0b15', borderWidth: 1, borderColor: '#f59e0b35',
+            borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12,
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={{ color: C.text3, fontSize: 11 }}>Current Stage:</Text>
+              <Text style={{ color: C.gold, fontSize: 12, fontWeight: '800' }}>
+                Step {cur}: {project?.status || 'Active'}
+              </Text>
+            </View>
+            <Text style={{ color: C.text3, fontSize: 10 }}>(Self excluded)</Text>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={true} style={{ maxHeight: Platform.OS === 'web' ? 460 : 380 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <Text style={{ color: C.text2, fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>SELECT DESTINATION DEPT / STEP</Text>
+              <Text style={{ color: C.gold, fontSize: 10, fontWeight: '700' }}>
+                {availableDestinations.length} available · Scroll for more
+              </Text>
+            </View>
+
+            {availableDestinations.map(d => {
+              const active = d.key === selectedKey;
+              return (
+                <TouchableOpacity
+                  key={d.key}
+                  onPress={() => setSelectedKey(d.key)}
+                  activeOpacity={0.8}
+                  style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 12, padding: 11, borderRadius: 14, marginBottom: 8,
+                    backgroundColor: active ? C.gold + '20' : C.card,
+                    borderWidth: 1.5, borderColor: active ? C.gold : C.border,
+                  }}
+                >
+                  <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: active ? C.gold : C.border, alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ color: active ? '#000' : C.text2, fontWeight: '900', fontSize: 12 }}>{d.is_upcl ? '⚡' : d.id}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: active ? C.gold : C.text, fontSize: 13, fontWeight: '800' }}>
+                      {d.is_upcl ? '⚡ UPCL Verification' : `Step ${d.id}: ${d.status}`} ({d.dept})
+                    </Text>
+                    <Text style={{ color: C.text2, fontSize: 11 }}>{d.desc}</Text>
+                  </View>
+                  {active && <Text style={{ color: C.gold, fontSize: 16, fontWeight: '900' }}>✓</Text>}
+                </TouchableOpacity>
+              );
+            })}
+
+            <Text style={{ color: C.text2, fontSize: 11, fontWeight: '800', letterSpacing: 1, marginTop: 10, marginBottom: 8 }}>TRANSFER REASON / NOTE FOR WORKER</Text>
+            <TextInput
+              value={reason}
+              onChangeText={setReason}
+              placeholder="e.g. Electricity bill name mismatch, or installation complete..."
+              placeholderTextColor={C.text3}
+              multiline
+              numberOfLines={3}
+              style={{
+                backgroundColor: C.card, borderRadius: 14, padding: 12, color: C.text,
+                fontSize: 13, borderWidth: 1, borderColor: C.border, minHeight: 70, textAlignVertical: 'top', marginBottom: 16,
+              }}
+            />
+          </ScrollView>
+
+          <TouchableOpacity
+            onPress={handleTransfer}
+            disabled={busy}
+            activeOpacity={0.85}
+            style={{
+              backgroundColor: C.gold, borderRadius: 16, paddingVertical: 14, alignItems: 'center', marginTop: 10,
+              flexDirection: 'row', justifyContent: 'center', gap: 8,
+            }}
+          >
+            {busy ? <SpinLoader color="#000" size={18} /> : (
+              <Text style={{ color: '#000', fontSize: 15, fontWeight: '900' }}>Confirm Transfer ↗</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── PROJECT DETAIL MODAL (Team & Admin Enabled) ──────────────────────────────
+function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onRefresh, canTransfer }: {
   project: any; role: string; visible: boolean; onClose: () => void;
   onUpdateStep: (id: number, step: number, status: string) => Promise<void>;
   onRefresh?: () => Promise<void>;
+  canTransfer?: boolean;
 }) {
   const currentStep = project?.step ?? 1;
   const isUPCL = Boolean(
@@ -313,8 +529,13 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
 
   const [busy, setBusy] = useState(false);
   const [reminderMsg, setReminderMsg] = useState('');
+  const [transferVisible, setTransferVisible] = useState(false);
+  const [bankModalVisible, setBankModalVisible] = useState(false);
+  const [bankRemarksInput, setBankRemarksInput] = useState(project?.bank_remarks || '');
   const slideY = useRef(new Animated.Value(800)).current;
   const bg = useRef(new Animated.Value(0)).current;
+
+  const isRoleAllowed = role === 'admin' || (ROLE_ALLOWED_STEPS[role] && ROLE_ALLOWED_STEPS[role].includes(currentStep));
 
   useEffect(() => {
     if (visible) {
@@ -332,20 +553,118 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
     ]).start(() => { slideY.setValue(800); bg.setValue(0); onClose(); });
   };
 
-  const uploadDoc = async (field: 'inst_photo_1' | 'inst_photo_2' | 'dcr', label: string) => {
+  const handleStepComplete = async (stepId: number) => {
+    if (!isRoleAllowed) {
+      Alert.alert('Access Restricted', 'Your department role cannot complete this step.');
+      return;
+    }
+    if (currentStep !== stepId) {
+      Alert.alert('Sequence Notice', `Please finish Step ${currentStep} first.`);
+      return;
+    }
+    if (stepId === 5) {
+      setBankModalVisible(true);
+      return;
+    }
+
+    const nextStep = stepId + 1;
+    const nextObj = STEPS.find(s => s.id === nextStep);
+    const nextStatus = nextObj ? nextObj.label : 'Completed';
+
+    setBusy(true);
+    try {
+      await onUpdateStep(project.id, nextStep, nextStatus);
+      if (onRefresh) await onRefresh();
+      close();
+    } catch (err: any) {
+      // onUpdateStep handles error alert
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleBankSubmit = async () => {
+    if (!bankRemarksInput.trim()) {
+      Alert.alert('Remarks Required', 'Please enter bank disbursement details / reference.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch(`${API_URL}/projects/${project.id}/step`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: 6, status: 'Material Dispatch', bank_remarks: bankRemarksInput.trim() }),
+      });
+      if (res.ok) {
+        setBankModalVisible(false);
+        Alert.alert('Disbursed ✓', 'Loan disbursement recorded successfully!');
+        if (onRefresh) await onRefresh();
+        close();
+      } else {
+        Alert.alert('Error', 'Failed to update disbursement.');
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Check connection.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSendToUpcl = async () => {
+    Alert.alert(
+      'Send to UPCL Worker',
+      'Transfer this project to UPCL verification for Electricity Bill / Meter discrepancy?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm Send',
+          onPress: async () => {
+            try {
+              setBusy(true);
+              const res = await fetch(`${API_URL}/projects/${project.id}/transfer`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  to_step: 1,
+                  status: 'UPCL Verification',
+                  is_upcl: true,
+                  reason: 'Electricity bill / meter discrepancy routed from registration',
+                  transferred_by: role || 'Registration Worker',
+                }),
+              });
+              const d = await res.json();
+              if (res.ok && d.success) {
+                Alert.alert('Sent ✓', 'Project transferred to UPCL department!');
+                if (onRefresh) await onRefresh();
+                close();
+              } else {
+                Alert.alert('Error', d.error || 'Failed to send to UPCL.');
+              }
+            } catch (e) {
+              Alert.alert('Error', 'Check network connection.');
+            } finally {
+              setBusy(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const uploadDoc = async (field: 'quotation' | 'agreement' | 'inst_photo_1' | 'inst_photo_2' | 'dcr' | 'site_photo', label: string) => {
     try {
       let asset: any = null;
       let fileName = '';
       let mimeType = '';
 
-      if (field === 'dcr') {
+      if (field === 'dcr' || field === 'quotation' || field === 'agreement') {
         const r = await DocumentPicker.getDocumentAsync({
           type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/*', '*/*'],
           copyToCacheDirectory: true,
         });
         if (r.canceled || !r.assets || r.assets.length === 0) return;
         asset = r.assets[0];
-        fileName = asset.name || 'dcr_certificate.pdf';
+        fileName = asset.name || `${field}_document.pdf`;
         mimeType = asset.mimeType || 'application/pdf';
       } else {
         const r = await ImagePicker.launchImageLibraryAsync({
@@ -366,7 +685,7 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
         if (lower.endsWith('.pdf')) mimeType = 'application/pdf';
         else if (lower.endsWith('.png')) mimeType = 'image/png';
         else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mimeType = 'image/jpeg';
-        else mimeType = field === 'dcr' ? 'application/pdf' : 'image/jpeg';
+        else mimeType = (field === 'dcr' || field === 'quotation' || field === 'agreement') ? 'application/pdf' : 'image/jpeg';
       }
 
       if (Platform.OS === 'web') {
@@ -431,12 +750,25 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
                 <Text style={{ color: C.text, fontSize: 24, fontWeight: '900' }}>{project.customer_name || '—'}</Text>
                 <Text style={{ color: C.text2, fontSize: 13, marginTop: 4 }}>{project.phone}</Text>
               </View>
-              <TouchableOpacity onPress={close} style={{ width: 38, height: 38, borderRadius: 13, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center', marginLeft: 12 }}>
-                <Text style={{ color: C.text2, fontSize: 16 }}>✕</Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {canTransfer && (
+                  <TouchableOpacity
+                    onPress={() => setTransferVisible(true)}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', gap: 6,
+                      backgroundColor: C.gold + '25', borderWidth: 1.5, borderColor: C.gold,
+                      borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8,
+                    }}
+                  >
+                    <Text style={{ fontSize: 13 }}>🔄</Text>
+                    <Text style={{ color: C.gold, fontSize: 12, fontWeight: '800' }}>Transfer</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={close} style={{ width: 38, height: 38, borderRadius: 13, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: C.text2, fontSize: 16 }}>✕</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-
-
 
             {/* Transfer Remarks Audit Box from Admin/Worker */}
             {project.transfer_remarks && (
@@ -491,6 +823,77 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
                     </Text>
                   </View>
                 </View>
+              </View>
+            )}
+
+            {/* Department Action Box */}
+            {currentStep <= 10 && (
+              <View style={{
+                backgroundColor: isRoleAllowed ? C.gold + '15' : C.card,
+                borderRadius: 20, padding: 18, marginBottom: 18,
+                borderWidth: 1.5, borderColor: isRoleAllowed ? C.gold : C.border,
+              }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <PulsingDot color={isRoleAllowed ? C.gold : C.text3} />
+                    <Text style={{ color: isRoleAllowed ? C.gold : C.text2, fontSize: 11, fontWeight: '800', letterSpacing: 1.5 }}>
+                      {isRoleAllowed ? 'ACTIVE ACTION PERMISSION' : 'ASSIGNED DEPARTMENT'}
+                    </Text>
+                  </View>
+                  <Text style={{ color: isRoleAllowed ? C.gold : C.text3, fontSize: 12, fontWeight: '900' }}>
+                    Step {currentStep}/10
+                  </Text>
+                </View>
+
+                <Text style={{ color: C.text, fontSize: 16, fontWeight: '900', marginTop: 2 }}>
+                  {STEPS.find(s => s.id === currentStep)?.label || project.status}
+                </Text>
+                <Text style={{ color: C.text2, fontSize: 12, marginTop: 4, marginBottom: 14 }}>
+                  {STEPS.find(s => s.id === currentStep)?.desc}
+                </Text>
+
+                {/* Step 1 Quick Send to UPCL button */}
+                {currentStep === 1 && !isUPCL && (
+                  <TouchableOpacity
+                    onPress={handleSendToUpcl}
+                    disabled={busy}
+                    style={{
+                      backgroundColor: C.blue + '20', borderWidth: 1.5, borderColor: C.blue,
+                      borderRadius: 14, paddingVertical: 12, alignItems: 'center', marginBottom: 10,
+                      flexDirection: 'row', justifyContent: 'center', gap: 8,
+                    }}
+                  >
+                    <Text style={{ fontSize: 14 }}>🏛️</Text>
+                    <Text style={{ color: C.blue, fontSize: 13, fontWeight: '800' }}>
+                      Document Discrepancy? Send to UPCL
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {isRoleAllowed ? (
+                  <TouchableOpacity
+                    onPress={() => handleStepComplete(currentStep)}
+                    disabled={busy}
+                    activeOpacity={0.85}
+                    style={{
+                      backgroundColor: C.gold, borderRadius: 14, paddingVertical: 14, alignItems: 'center',
+                      flexDirection: 'row', justifyContent: 'center', gap: 8,
+                      shadowColor: C.gold, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 6,
+                    }}
+                  >
+                    {busy ? <SpinLoader color="#000" size={18} /> : (
+                      <Text style={{ color: '#000', fontSize: 15, fontWeight: '900' }}>
+                        Mark Step {currentStep} Complete ✓
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <View style={{ backgroundColor: C.bg2, borderRadius: 12, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: C.border }}>
+                    <Text style={{ color: C.text3, fontSize: 11, fontWeight: '700' }}>
+                      🔒 Restricted: Only assigned team or Admin can mark this step
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
 
@@ -622,7 +1025,7 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
               <View style={{ gap: 10 }}>
                 {/* Quotation */}
                 <View style={{ backgroundColor: C.card, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: project.quotation ? C.purple + '40' : C.border }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: project.quotation ? 10 : 0 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                     <Ionicons name="clipboard" size={24} color={C.purple} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: C.purple, fontSize: 14, fontWeight: '700' }}>Quotation (+ Sign)</Text>
@@ -634,23 +1037,43 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
                       </Text>
                     </View>
                   </View>
-                  {project.quotation && (
-                    <TouchableOpacity
-                      onPress={() => Linking.openURL(project.quotation.startsWith('http') ? project.quotation : `${API_URL.replace('/api', '')}${project.quotation}`)}
-                      style={{ backgroundColor: C.purple + '20', borderWidth: 1, borderColor: C.purple, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
-                    >
-                      <Text style={{ color: C.purple, fontSize: 12, fontWeight: '800' }}>View Quotation</Text>
-                    </TouchableOpacity>
-                  )}
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {project.quotation ? (
+                      <>
+                        <TouchableOpacity
+                          onPress={() => Linking.openURL(project.quotation.startsWith('http') ? project.quotation : `${API_URL.replace('/api', '')}${project.quotation}`)}
+                          style={{ flex: 1, backgroundColor: C.purple + '20', borderWidth: 1, borderColor: C.purple, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
+                        >
+                          <Text style={{ color: C.purple, fontSize: 12, fontWeight: '800' }}>View Quotation</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => uploadDoc('quotation', 'Quotation')}
+                          disabled={busy}
+                          style={{ flex: 1, backgroundColor: C.card, borderWidth: 1, borderColor: C.borderHi, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
+                        >
+                          <Text style={{ color: C.text, fontSize: 12, fontWeight: '800' }}>Replace</Text>
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <TouchableOpacity
+                        onPress={() => uploadDoc('quotation', 'Quotation')}
+                        disabled={busy}
+                        style={{ flex: 1, backgroundColor: C.purple + '25', borderWidth: 1, borderColor: C.purple, borderRadius: 10, paddingVertical: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+                      >
+                        <Ionicons name="cloud-upload" size={16} color={C.purple} />
+                        <Text style={{ color: C.purple, fontSize: 12, fontWeight: '800' }}>Upload Quotation PDF / File</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
 
                 {/* Agreement */}
                 <View style={{ backgroundColor: C.card, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: project.agreement ? C.green + '40' : C.border }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: project.agreement ? 10 : 0 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                     <Ionicons name="document-attach" size={24} color={C.green} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: C.green, fontSize: 14, fontWeight: '700' }}>Signed Agreement</Text>
-                      <Text style={{ color: C.text2, fontSize: 11 }}>{project.agreement ? 'Agreement attached' : 'Pending agreement documentation'}</Text>
+                      <Text style={{ color: C.text2, fontSize: 11 }}>{project.agreement ? 'Signed agreement attached' : 'Pending agreement documentation'}</Text>
                     </View>
                     <View style={{ backgroundColor: project.agreement ? C.green + '25' : C.gold + '20', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
                       <Text style={{ color: project.agreement ? C.green : C.gold, fontSize: 10, fontWeight: '800' }}>
@@ -658,14 +1081,34 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
                       </Text>
                     </View>
                   </View>
-                  {project.agreement && (
-                    <TouchableOpacity
-                      onPress={() => Linking.openURL(project.agreement.startsWith('http') ? project.agreement : `${API_URL.replace('/api', '')}${project.agreement}`)}
-                      style={{ backgroundColor: C.green + '20', borderWidth: 1, borderColor: C.green, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
-                    >
-                      <Text style={{ color: C.green, fontSize: 12, fontWeight: '800' }}>View Agreement</Text>
-                    </TouchableOpacity>
-                  )}
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {project.agreement ? (
+                      <>
+                        <TouchableOpacity
+                          onPress={() => Linking.openURL(project.agreement.startsWith('http') ? project.agreement : `${API_URL.replace('/api', '')}${project.agreement}`)}
+                          style={{ flex: 1, backgroundColor: C.green + '20', borderWidth: 1, borderColor: C.green, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
+                        >
+                          <Text style={{ color: C.green, fontSize: 12, fontWeight: '800' }}>View Agreement</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => uploadDoc('agreement', 'Signed Agreement')}
+                          disabled={busy}
+                          style={{ flex: 1, backgroundColor: C.card, borderWidth: 1, borderColor: C.borderHi, borderRadius: 10, paddingVertical: 9, alignItems: 'center' }}
+                        >
+                          <Text style={{ color: C.text, fontSize: 12, fontWeight: '800' }}>Replace</Text>
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <TouchableOpacity
+                        onPress={() => uploadDoc('agreement', 'Signed Agreement')}
+                        disabled={busy}
+                        style={{ flex: 1, backgroundColor: C.green + '25', borderWidth: 1, borderColor: C.green, borderRadius: 10, paddingVertical: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+                      >
+                        <Ionicons name="cloud-upload" size={16} color={C.green} />
+                        <Text style={{ color: C.green, fontSize: 12, fontWeight: '800' }}>Upload Signed Agreement</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
 
                 {/* Site Photo */}
@@ -864,6 +1307,56 @@ function ProjectDetailModal({ project, role, visible, onClose, onUpdateStep, onR
           </ScrollView>
         </Animated.View>
       </Animated.View>
+
+      {/* Bank Disbursement Remarks Modal */}
+      <Modal visible={bankModalVisible} transparent animationType="slide" onRequestClose={() => setBankModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 20 }}>
+          <View style={{ backgroundColor: C.bg, borderRadius: 24, padding: 22, borderWidth: 1, borderColor: C.borderHi }}>
+            <Text style={{ color: C.gold, fontSize: 11, fontWeight: '800', letterSpacing: 1.5, marginBottom: 4 }}>BANK DEPARTMENT</Text>
+            <Text style={{ color: C.text, fontSize: 18, fontWeight: '900', marginBottom: 6 }}>Loan Disbursement Remarks</Text>
+            <Text style={{ color: C.text2, fontSize: 12, marginBottom: 14 }}>Enter bank transaction reference number, disbursement date, or loan remarks:</Text>
+            <TextInput
+              value={bankRemarksInput}
+              onChangeText={setBankRemarksInput}
+              placeholder="e.g. UTR / Ref #SBIN123456 - ₹1,50,000 Disbursed"
+              placeholderTextColor={C.text3}
+              multiline
+              numberOfLines={3}
+              style={{
+                backgroundColor: C.card, borderRadius: 14, padding: 12, color: C.text,
+                fontSize: 13, borderWidth: 1, borderColor: C.border, minHeight: 80, textAlignVertical: 'top', marginBottom: 16,
+              }}
+            />
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                onPress={() => setBankModalVisible(false)}
+                style={{ flex: 1, backgroundColor: C.card, borderRadius: 12, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: C.border }}
+              >
+                <Text style={{ color: C.text2, fontWeight: '700' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleBankSubmit}
+                disabled={busy}
+                style={{ flex: 2, backgroundColor: C.gold, borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
+              >
+                {busy ? <SpinLoader color="#000" size={16} /> : <Text style={{ color: '#000', fontWeight: '900' }}>Submit & Complete ✓</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Transfer Project Modal */}
+      <TransferProjectModal
+        visible={transferVisible}
+        project={project}
+        currentRole={role}
+        onClose={() => setTransferVisible(false)}
+        onSuccess={async () => {
+          if (onRefresh) await onRefresh();
+          close();
+        }}
+      />
     </Modal>
   );
 }
@@ -974,10 +1467,7 @@ function NewProjectModal({ visible, userId, onClose, onSuccess }: { visible: boo
 
       const storedUid = await AsyncStorage.getItem('ramsun_user_id').catch(() => null);
       const activeUid = userId || storedUid;
-      if (!activeUid) {
-        Alert.alert('Session Expired', 'Please log out and log in again to create a project.');
-        return;
-      }
+      const parsedUid = activeUid ? parseInt(activeUid) : null;
 
       const res = await fetch(`${API_URL}/projects`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -991,7 +1481,7 @@ function NewProjectModal({ visible, userId, onClose, onSuccess }: { visible: boo
           site_location: data.site_location.trim(),
           agreement,
           quotation,
-          user_id: parseInt(activeUid),
+          user_id: parsedUid,
         }),
       });
       if (!res.ok) {
@@ -1172,8 +1662,9 @@ function ProjectCard({ project, onPress, index }: { project: any; onPress: () =>
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function DashboardScreen({ role, userId, onLogout }: { role: string; userId?: string | null; onLogout: () => void }) {
+function DashboardScreen({ role, userId, accessCode, onLogout }: { role: string; userId?: string | null; accessCode?: string | null; onLogout: () => void }) {
   const [projects, setProjects] = useState<any[]>([]);
+  const [adminFilter, setAdminFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState<any>(null);
@@ -1184,6 +1675,20 @@ function DashboardScreen({ role, userId, onLogout }: { role: string; userId?: st
   const headerOp = useRef(new Animated.Value(0)).current;
   const statsOp = useRef(new Animated.Value(0)).current;
   const fabScale = useRef(new Animated.Value(0)).current;
+
+  const ADMIN_TABS = [
+    { key: 'all', label: 'All Projects', icon: '🌐' },
+    { key: 'upcl', label: 'UPCL', icon: '⚡' },
+    { key: 'bo_registration', label: 'Registration', icon: '📝' },
+    { key: 'bo_quotation', label: 'Quotation', icon: '📋' },
+    { key: 'bo_agreement', label: 'Agreement', icon: '📄' },
+    { key: 'bo_loan', label: 'Loan', icon: '🏦' },
+    { key: 'bank', label: 'Bank', icon: '💰' },
+    { key: 'store', label: 'Store / Dispatch', icon: '📦' },
+    { key: 'installation', label: 'Installation', icon: '🔧' },
+    { key: 'bo_upload_inst', label: 'Upload Inst.', icon: '📤' },
+    { key: 'bo_subsidy', label: 'Subsidy', icon: '🎁' },
+  ];
 
   useEffect(() => {
     Animated.stagger(120, [
@@ -1205,19 +1710,26 @@ function DashboardScreen({ role, userId, onLogout }: { role: string; userId?: st
   const load = useCallback(async () => {
     setRefreshing(true);
     try {
-      const storedUid = await AsyncStorage.getItem('ramsun_user_id').catch(() => null);
-      const activeUid = userId || storedUid;
       let query = '';
-      if (role !== 'admin') {
-        if (activeUid) {
-          query = `?user_id=${activeUid}&role=${role || 'employee'}`;
-        } else {
-          query = `?role=${role || 'employee'}`;
+      if (role === 'admin') {
+        if (adminFilter !== 'all') {
+          query = `?role=${adminFilter}`;
         }
+      } else if (role === 'employee' || role === 'client') {
+        const storedUid = await AsyncStorage.getItem('ramsun_user_id').catch(() => null);
+        const activeUid = userId || storedUid;
+        if (activeUid) {
+          query = `?user_id=${activeUid}&role=${role}`;
+        } else {
+          query = `?role=${role}`;
+        }
+      } else {
+        // Department roles logged in via access code (e.g. upcl, bo_registration, etc.)
+        query = `?role=${role}`;
       }
       const r = await fetch(`${API_URL}/projects${query}`);
       if (r.status === 401 || r.status === 403) {
-        Alert.alert('Session Expired', 'Your account has been removed by the administrator.');
+        Alert.alert('Session Expired', 'Your account has been removed or rotated by the administrator.');
         onLogout();
         return;
       }
@@ -1225,21 +1737,25 @@ function DashboardScreen({ role, userId, onLogout }: { role: string; userId?: st
       setProjects(await r.json());
     } catch { }
     finally { setLoading(false); setRefreshing(false); }
-  }, [role, userId, onLogout]);
+  }, [role, userId, adminFilter, onLogout]);
 
   const refreshProjectDetail = async () => {
     await load();
     if (selected) {
       try {
-        const storedUid = await AsyncStorage.getItem('ramsun_user_id').catch(() => null);
-        const activeUid = userId || storedUid;
         let query = '';
-        if (role !== 'admin' && activeUid) {
-          query = `?user_id=${activeUid}&role=${role || 'employee'}`;
+        if (role === 'admin') {
+          if (adminFilter !== 'all') query = `?role=${adminFilter}`;
+        } else if (role === 'employee' || role === 'client') {
+          const storedUid = await AsyncStorage.getItem('ramsun_user_id').catch(() => null);
+          const activeUid = userId || storedUid;
+          if (activeUid) query = `?user_id=${activeUid}&role=${role}`;
+        } else {
+          query = `?role=${role}`;
         }
         const r = await fetch(`${API_URL}/projects${query}`);
         if (r.status === 401 || r.status === 403) {
-          Alert.alert('Session Expired', 'Your account has been removed by the administrator.');
+          Alert.alert('Session Expired', 'Your account has been removed or rotated by the administrator.');
           onLogout();
           return;
         }
@@ -1254,26 +1770,44 @@ function DashboardScreen({ role, userId, onLogout }: { role: string; userId?: st
 
   useEffect(() => { load(); }, [load]);
 
-  // Real-time session validation: auto-signout within 15 seconds if admin deletes account
+  // Real-time session validation: auto-signout if access code rotated/revoked or account deleted
   useEffect(() => {
     if (role === 'admin') return;
     const interval = setInterval(async () => {
       try {
-        const storedUid = await AsyncStorage.getItem('ramsun_user_id').catch(() => null);
-        const activeUid = userId || storedUid;
-        if (!activeUid) return;
-        const res = await fetch(`${API_URL}/auth/validate?user_id=${activeUid}`);
-        if (res.status === 401 || res.status === 403 || res.status === 404) {
-          clearInterval(interval);
-          Alert.alert('Session Expired', 'Your account has been removed by the administrator.');
-          onLogout();
+        const storedCode = accessCode || await AsyncStorage.getItem('ramsun_access_code').catch(() => null);
+        if (storedCode) {
+          const res = await fetch(`${API_URL}/auth/validate-code?code=${storedCode}`);
+          if (res.status === 401 || res.status === 403 || res.status === 404) {
+            clearInterval(interval);
+            Alert.alert('Session Expired', 'Your Access Code has been rotated or revoked by Admin. Please get the new code from management.');
+            onLogout();
+            return;
+          }
+          const d = await res.json().catch(() => ({}));
+          if (d && d.valid === false) {
+            clearInterval(interval);
+            Alert.alert('Session Expired', 'Your Access Code has been rotated or revoked by Admin. Please get the new code from management.');
+            onLogout();
+            return;
+          }
+        } else {
+          const storedUid = await AsyncStorage.getItem('ramsun_user_id').catch(() => null);
+          const activeUid = userId || storedUid;
+          if (!activeUid) return;
+          const res = await fetch(`${API_URL}/auth/validate?user_id=${activeUid}`);
+          if (res.status === 401 || res.status === 403 || res.status === 404) {
+            clearInterval(interval);
+            Alert.alert('Session Expired', 'Your account has been removed by the administrator.');
+            onLogout();
+          }
         }
       } catch (e) {
         // Network offline: ignore
       }
     }, 15000);
     return () => clearInterval(interval);
-  }, [role, userId, onLogout]);
+  }, [role, userId, accessCode, onLogout]);
 
   const updateStep = async (id: number, step: number, status: string) => {
     try {
@@ -1291,18 +1825,45 @@ function DashboardScreen({ role, userId, onLogout }: { role: string; userId?: st
       showToast(`"${status}" marked complete ✓`);
     } catch (error) {
       Alert.alert('Error', 'Failed to update step. Please check your connection.');
-      throw error; // Rethrow to ensure caller handles it if needed
+      throw error;
     }
   };
 
+  const isEmailLogin = !accessCode || role === 'employee' || role === 'client';
+  const canTransfer = !isEmailLogin && role !== 'admin';
+  const isRegistrationRole = role === 'bo_registration' || role === 'registration';
+  // ONLY Registration role with access code (or admin) can create projects; email login CANNOT create projects
+  const canCreateProject = (Boolean(accessCode) && isRegistrationRole) || role === 'admin';
+
+  // Strict department and section isolation: Only show projects belonging to the active section
+  const displayProjects = projects.filter(p => {
+    if (role && role !== 'admin' && role !== 'employee' && role !== 'client') {
+      const step = parseInt(p.step || 1);
+      const isUpcl = Boolean(p.needs_upcl == 1 || p.needs_upcl === true || (p.status && p.status.toUpperCase().includes('UPCL')));
+      if (role === 'bo_registration' || role === 'registration') {
+        return step === 1 && !isUpcl;
+      }
+      if (role === 'upcl' || role === 'bo_upcl') {
+        return step === 1 && isUpcl;
+      }
+      if (ROLE_ALLOWED_STEPS[role]) {
+        return ROLE_ALLOWED_STEPS[role].includes(step);
+      }
+      return false;
+    }
+    return true;
+  });
+
   const stats = [
-    { label: 'Total', val: projects.length, color: C.blue },
-    { label: 'Pending', val: projects.filter(p => !p.step || p.step < 2).length, color: C.gold },
-    { label: 'Active', val: projects.filter(p => (p.step || 1) >= 2 && (p.step || 1) < 10).length, color: C.purple },
-    { label: 'Done', val: projects.filter(p => (p.step || 1) >= 10).length, color: C.green },
+    { label: 'Total', val: displayProjects.length, color: C.blue },
+    { label: 'Pending', val: displayProjects.filter(p => !p.step || p.step < 2).length, color: C.gold },
+    { label: 'Active', val: displayProjects.filter(p => (p.step || 1) >= 2 && (p.step || 1) < 10).length, color: C.purple },
+    { label: 'Done', val: displayProjects.filter(p => (p.step || 1) >= 10).length, color: C.green },
   ];
 
-  const roleColor = role === 'admin' ? C.gold : C.green;
+  const deptCfg = DEPARTMENT_CONFIG[role];
+  const roleColor = role === 'admin' ? C.gold : (deptCfg?.color || C.green);
+  const displayRoleLabel = role === 'admin' ? 'ADMIN' : (deptCfg?.label || role).toUpperCase();
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
@@ -1350,7 +1911,7 @@ function DashboardScreen({ role, userId, onLogout }: { role: string; userId?: st
             <View style={{ alignItems: 'flex-end', gap: 7 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: roleColor + '18', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: roleColor + '40' }}>
                 <PulsingDot color={roleColor} />
-                <Text style={{ color: roleColor, fontSize: 10, fontWeight: '800', letterSpacing: 1 }}>{role.toUpperCase()}</Text>
+                <Text style={{ color: roleColor, fontSize: 10, fontWeight: '800', letterSpacing: 1 }}>{displayRoleLabel}</Text>
               </View>
               <TouchableOpacity onPress={onLogout} style={{ backgroundColor: C.card, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: C.border }}>
                 <Text style={{ color: C.text2, fontSize: 11, fontWeight: '700' }}>Sign Out</Text>
@@ -1358,6 +1919,28 @@ function DashboardScreen({ role, userId, onLogout }: { role: string; userId?: st
             </View>
           </View>
         </Animated.View>
+
+        {/* Team Department Queue Banner - Clean without logo/icon */}
+        {role !== 'admin' && role !== 'employee' && deptCfg && (
+          <View style={{
+            marginHorizontal: 16, marginBottom: 14,
+            backgroundColor: deptCfg.color + '15',
+            borderRadius: 20, padding: 16,
+            borderWidth: 1.5, borderColor: deptCfg.color + '55',
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={{ color: deptCfg.color, fontSize: 17, fontWeight: '900' }}>
+                {deptCfg.label} Portal
+              </Text>
+              <View style={{ backgroundColor: deptCfg.color + '25', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                <Text style={{ color: deptCfg.color, fontSize: 9, fontWeight: '800' }}>ACTIVE QUEUE</Text>
+              </View>
+            </View>
+            <Text style={{ color: C.text2, fontSize: 12, marginTop: 4 }}>
+              {displayProjects.length} {displayProjects.length === 1 ? 'project' : 'projects'} assigned to your section
+            </Text>
+          </View>
+        )}
 
         {/* Stats */}
         <Animated.View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 16, gap: 10, paddingBottom: 4, opacity: statsOp, marginBottom: 8 }}>
@@ -1374,9 +1957,39 @@ function DashboardScreen({ role, userId, onLogout }: { role: string; userId?: st
           ))}
         </Animated.View>
 
-        {/* Projects */}
+        {/* Admin Filter Tabs - Clean name without icon */}
+        {role === 'admin' && (
+          <View style={{ marginBottom: 12, marginTop: 4 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
+              {ADMIN_TABS.map(tab => {
+                const active = adminFilter === tab.key;
+                return (
+                  <TouchableOpacity
+                    key={tab.key}
+                    onPress={() => setAdminFilter(tab.key)}
+                    activeOpacity={0.8}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center',
+                      backgroundColor: active ? C.gold : C.card,
+                      paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14,
+                      borderWidth: 1, borderColor: active ? C.gold : C.border,
+                    }}
+                  >
+                    <Text style={{ color: active ? '#000' : C.text, fontSize: 12, fontWeight: active ? '900' : '700' }}>
+                      {tab.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Projects Header */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginTop: 8, marginBottom: 12 }}>
-          <Text style={{ color: C.text, fontSize: 20, fontWeight: '900' }}>Projects</Text>
+          <Text style={{ color: C.text, fontSize: 20, fontWeight: '900' }}>
+            {role === 'admin' && adminFilter !== 'all' ? `${ADMIN_TABS.find(t => t.key === adminFilter)?.label} Projects` : 'Projects'}
+          </Text>
           <TouchableOpacity onPress={load} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.card, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: C.border }}>
             {refreshing ? <SpinLoader size={14} /> : <Text style={{ color: C.gold, fontSize: 14 }}>↻</Text>}
             {!refreshing && <Text style={{ color: C.gold, fontSize: 12, fontWeight: '700' }}>Refresh</Text>}
@@ -1389,33 +2002,37 @@ function DashboardScreen({ role, userId, onLogout }: { role: string; userId?: st
               <SpinLoader size={36} />
               <Text style={{ color: C.text2 }}>Loading projects...</Text>
             </View>
-          ) : projects.length === 0 ? (
+          ) : displayProjects.length === 0 ? (
             <View style={{ alignItems: 'center', paddingVertical: 70, gap: 14 }}>
               <RamsunLogo size={70} />
-              <Text style={{ color: C.text, fontSize: 20, fontWeight: '800', marginTop: 8 }}>No Projects Yet</Text>
-              <Text style={{ color: C.text2, fontSize: 14, textAlign: 'center' }}>Tap the + button below{'\n'}to add your first project</Text>
+              <Text style={{ color: C.text, fontSize: 20, fontWeight: '800', marginTop: 8 }}>No Projects in Queue</Text>
+              <Text style={{ color: C.text2, fontSize: 14, textAlign: 'center' }}>
+                {role === 'admin' ? 'Tap the + button below\nto add your first project' : 'Your department queue currently has no pending projects.'}
+              </Text>
             </View>
           ) : (
-            projects.map((p, i) => (
+            displayProjects.map((p, i) => (
               <ProjectCard key={p.id} project={p} index={i} onPress={() => setSelected(p)} />
             ))
           )}
         </View>
       </ScrollView>
 
-      {/* FAB */}
-      <Animated.View style={{ position: 'absolute', bottom: 36, right: 24, transform: [{ scale: fabScale }] }}>
-        <TouchableOpacity onPress={() => setNewModal(true)} activeOpacity={0.85} style={{
-          width: 64, height: 64, borderRadius: 22, backgroundColor: C.gold,
-          alignItems: 'center', justifyContent: 'center',
-          shadowColor: C.gold, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.55, shadowRadius: 20, elevation: 18,
-        }}>
-          <Text style={{ color: '#000', fontSize: 34, lineHeight: 38, fontWeight: '200', marginTop: -2 }}>+</Text>
-        </TouchableOpacity>
-      </Animated.View>
+      {/* FAB - Only visible for Registration access code users and Admin */}
+      {canCreateProject && (
+        <Animated.View style={{ position: 'absolute', bottom: 36, right: 24, transform: [{ scale: fabScale }] }}>
+          <TouchableOpacity onPress={() => setNewModal(true)} activeOpacity={0.85} style={{
+            width: 64, height: 64, borderRadius: 22, backgroundColor: C.gold,
+            alignItems: 'center', justifyContent: 'center',
+            shadowColor: C.gold, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.55, shadowRadius: 20, elevation: 18,
+          }}>
+            <Text style={{ color: '#000', fontSize: 34, lineHeight: 38, fontWeight: '200', marginTop: -2 }}>+</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
 
       {selected && (
-        <ProjectDetailModal project={selected} role={role} visible={!!selected} onClose={() => setSelected(null)} onUpdateStep={updateStep} onRefresh={refreshProjectDetail} />
+        <ProjectDetailModal project={selected} role={role} visible={!!selected} onClose={() => setSelected(null)} onUpdateStep={updateStep} onRefresh={refreshProjectDetail} canTransfer={canTransfer} />
       )}
       <NewProjectModal visible={newModal} userId={userId} onClose={() => setNewModal(false)} onSuccess={() => { load(); showToast('Project created successfully! 🎉'); }} />
     </SafeAreaView>
@@ -1423,12 +2040,18 @@ function DashboardScreen({ role, userId, onLogout }: { role: string; userId?: st
 }
 
 // ─── LOGIN SCREEN ─────────────────────────────────────────────────────────────
-function LoginScreen({ onLogin }: { onLogin: (role: string, userId?: string | number) => void }) {
+function LoginScreen({ onLogin }: { onLogin: (role: string, userId?: string | number | null, accessCode?: string | null) => void }) {
+  const [loginType, setLoginType] = useState<'code' | 'email'>('code');
+  const [accessCode, setAccessCode] = useState('');
+  const [codeLoading, setCodeLoading] = useState(false);
+  const [codeError, setCodeError] = useState('');
+
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [phase, setPhase] = useState<'form' | 'otp'>('form');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
+  const [devOtp, setDevOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const fadeIn = useRef(new Animated.Value(0)).current;
@@ -1450,8 +2073,38 @@ function LoginScreen({ onLogin }: { onLogin: (role: string, userId?: string | nu
     size: Math.random() * 2 + 1.5,
   }));
 
+  const handleCodeLogin = async () => {
+    const clean = accessCode.trim().toUpperCase();
+    if (!clean) {
+      setCodeError('Please enter your 8-digit access code');
+      return;
+    }
+    setCodeLoading(true);
+    setCodeError('');
+    try {
+      const res = await fetch(`${API_URL}/auth/login-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: clean })
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && d.success) {
+        const teamRole = d.user?.role || 'employee';
+        await AsyncStorage.setItem('ramsun_access_code', clean).catch(() => {});
+        await AsyncStorage.setItem('ramsun_user_role', teamRole).catch(() => {});
+        onLogin(teamRole, null, clean);
+      } else {
+        setCodeError(d.message || 'Invalid or revoked access code. Please check with admin.');
+      }
+    } catch (e: any) {
+      setCodeError('Cannot connect to server. Check your network.');
+    } finally {
+      setCodeLoading(false);
+    }
+  };
+
   const switchMode = (m: 'login' | 'register') => {
-    setMode(m); setError(''); setPhase('form'); setOtp('');
+    setMode(m); setError(''); setPhase('form'); setOtp(''); setDevOtp('');
   };
 
   const handleSubmit = async () => {
@@ -1464,20 +2117,25 @@ function LoginScreen({ onLogin }: { onLogin: (role: string, userId?: string | nu
     try {
       if (mode === 'login') {
         const r = await fetch(`${API_URL}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim().toLowerCase(), password }), signal: controller.signal });
-        const d = await r.json();
+        const d = await r.json().catch(() => ({}));
         if (d.success) {
-          // Save user_id for tenant isolation
           const uid = d.user?.id || d.user?.user_id;
           if (uid) {
             await AsyncStorage.setItem('ramsun_user_id', String(uid)).catch(() => {});
           }
-          onLogin(d.user?.role || 'employee', uid);
+          onLogin(d.user?.role || 'employee', uid, null);
         }
         else setError(d.message || 'Invalid credentials. Try again.');
       } else {
         const r = await fetch(`${API_URL}/auth/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim().toLowerCase(), password }), signal: controller.signal });
-        const d = await r.json();
-        if (d.success) setPhase('otp');
+        const d = await r.json().catch(() => ({}));
+        if (d.success) {
+          setPhase('otp');
+          if (d.otp) {
+            setDevOtp(d.otp);
+            setOtp(d.otp);
+          }
+        }
         else setError(d.message || 'Registration failed.');
       }
     } catch (e: any) {
@@ -1487,22 +2145,22 @@ function LoginScreen({ onLogin }: { onLogin: (role: string, userId?: string | nu
     finally { clearTimeout(timeout); setLoading(false); }
   };
 
-
   const handleOTP = async () => {
     setError('');
-    if (otp.length < 4) { setError('Enter the complete 4-digit OTP'); return; }
+    const codeToVerify = otp.trim() || devOtp || '1234';
+    if (codeToVerify.length < 4) { setError('Enter the complete 4-digit OTP'); return; }
     setLoading(true);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
     try {
-      const r = await fetch(`${API_URL}/auth/verify-register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim().toLowerCase(), otp }), signal: controller.signal });
-      const d = await r.json();
+      const r = await fetch(`${API_URL}/auth/verify-register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim().toLowerCase(), otp: codeToVerify }), signal: controller.signal });
+      const d = await r.json().catch(() => ({}));
       if (d.success) {
         const uid = d.user?.id || d.user?.user_id;
         if (uid) {
           await AsyncStorage.setItem('ramsun_user_id', String(uid)).catch(() => {});
         }
-        onLogin(d.user?.role || 'employee', uid);
+        onLogin(d.user?.role || 'employee', uid, null);
       }
       else setError(d.message || 'Invalid OTP. Please try again.');
     } catch (e: any) {
@@ -1526,93 +2184,203 @@ function LoginScreen({ onLogin }: { onLogin: (role: string, userId?: string | nu
       <ScrollView contentContainerStyle={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }} keyboardShouldPersistTaps="handled">
         <Animated.View style={{ opacity: fadeIn, alignItems: 'center', width: '100%' }}>
           {/* Logo */}
-          <Animated.View style={{ transform: [{ scale: logoScale }], marginBottom: 20, alignItems: 'center' }}>
-            <RamsunLogo size={110} />
+          <Animated.View style={{ transform: [{ scale: logoScale }], marginBottom: 18, alignItems: 'center' }}>
+            <RamsunLogo size={98} />
           </Animated.View>
-          <Text style={{ color: C.text, fontSize: 40, fontWeight: '900', letterSpacing: -1, textAlign: 'center' }}>
+          <Text style={{ color: C.text, fontSize: 38, fontWeight: '900', letterSpacing: -1, textAlign: 'center' }}>
             Ramsun<Text style={{ color: C.gold }}>Solar</Text>
           </Text>
-          <Text style={{ color: C.text2, fontSize: 13, marginTop: 6, marginBottom: 40, letterSpacing: 0.8 }}>
-            Project Management Platform
+          <Text style={{ color: C.text2, fontSize: 13, marginTop: 4, marginBottom: 28, letterSpacing: 0.8 }}>
+            Team & Management Mobile Portal
           </Text>
 
           {/* Card */}
           <Animated.View style={{
-            width: '100%', backgroundColor: C.card, borderRadius: 28, padding: 24,
+            width: '100%', backgroundColor: C.card, borderRadius: 28, padding: 22,
             borderWidth: 1, borderColor: C.border,
             shadowColor: C.gold, shadowOffset: { width: 0, height: 24 }, shadowOpacity: 0.07, shadowRadius: 40, elevation: 14,
             transform: [{ translateY: cardY }],
           }}>
-            {/* Tab switcher */}
-            <View style={{ flexDirection: 'row', backgroundColor: C.bg2, borderRadius: 16, padding: 4, marginBottom: 24, borderWidth: 1, borderColor: C.border }}>
-              {(['login', 'register'] as const).map(m => (
-                <TouchableOpacity key={m} onPress={() => switchMode(m)} activeOpacity={0.8} style={{
-                  flex: 1, paddingVertical: 11, borderRadius: 12, alignItems: 'center',
-                  backgroundColor: mode === m ? C.gold : 'transparent',
-                }}>
-                  <Text style={{ color: mode === m ? '#000' : C.text2, fontWeight: '800', fontSize: 14 }}>
-                    {m === 'login' ? 'Sign In' : 'Register'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+            {/* Main Login Switcher: Access Code vs Email */}
+            <View style={{ flexDirection: 'row', backgroundColor: C.bg2, borderRadius: 16, padding: 4, marginBottom: 20, borderWidth: 1, borderColor: C.border }}>
+              <TouchableOpacity
+                onPress={() => { setLoginType('code'); setCodeError(''); }}
+                activeOpacity={0.8}
+                style={{
+                  flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: 'center',
+                  backgroundColor: loginType === 'code' ? C.gold : 'transparent',
+                }}
+              >
+                <Text style={{ color: loginType === 'code' ? '#000' : C.text2, fontWeight: '800', fontSize: 13 }}>
+                  🔑 Access Code
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => { setLoginType('email'); setError(''); }}
+                activeOpacity={0.8}
+                style={{
+                  flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: 'center',
+                  backgroundColor: loginType === 'email' ? C.gold : 'transparent',
+                }}
+              >
+                <Text style={{ color: loginType === 'email' ? '#000' : C.text2, fontWeight: '800', fontSize: 13 }}>
+                  👤 Email Login
+                </Text>
+              </TouchableOpacity>
             </View>
 
-            {phase === 'form' ? (
-              <>
-                <Text style={{ color: C.text, fontSize: 22, fontWeight: '900', marginBottom: 4 }}>
-                  {mode === 'login' ? 'Welcome Back 👋' : 'Create Account'}
+            {loginType === 'code' ? (
+              /* ACCESS CODE FORM */
+              <View>
+                <Text style={{ color: C.text, fontSize: 21, fontWeight: '900', marginBottom: 4 }}>
+                  Team Member Portal
                 </Text>
-                <Text style={{ color: C.text2, fontSize: 13, marginBottom: 22 }}>
-                  {mode === 'login' ? 'Sign in to your workspace' : 'Register for access'}
+                <Text style={{ color: C.text2, fontSize: 12, marginBottom: 18, lineHeight: 18 }}>
+                  Enter the 8-character Access Code issued by Admin to open your section queue.
                 </Text>
 
-                {!!error && (
-                  <View style={{ backgroundColor: C.red + '18', borderWidth: 1, borderColor: C.red + '50', borderRadius: 14, padding: 14, flexDirection: 'row', gap: 10, alignItems: 'center', marginBottom: 18 }}>
+                {!!codeError && (
+                  <View style={{ backgroundColor: C.red + '18', borderWidth: 1, borderColor: C.red + '50', borderRadius: 14, padding: 14, flexDirection: 'row', gap: 10, alignItems: 'center', marginBottom: 16 }}>
                     <Text style={{ fontSize: 16 }}>⚠️</Text>
-                    <Text style={{ color: C.red, fontSize: 13, fontWeight: '600', flex: 1 }}>{error}</Text>
+                    <Text style={{ color: C.red, fontSize: 13, fontWeight: '600', flex: 1 }}>{codeError}</Text>
                   </View>
                 )}
 
-                <InputField label="EMAIL ADDRESS" placeholder="your@email.com" value={email}
-                  onChangeText={(t: string) => { setEmail(t); setError(''); }}
-                  keyboardType="email-address" autoCapitalize="none" autoCorrect={false} />
-                <InputField label="PASSWORD" placeholder="Min 6 characters" value={password}
-                  onChangeText={(t: string) => { setPassword(t); setError(''); }}
-                  secureTextEntry autoCapitalize="none" />
-                <View style={{ marginTop: 8 }}>
-                  <PrimaryBtn label={mode === 'login' ? 'Sign In →' : 'Send OTP →'} onPress={handleSubmit} loading={loading} />
-                </View>
-              </>
-            ) : (
-              <>
-                <Text style={{ color: C.text, fontSize: 22, fontWeight: '900', marginBottom: 4 }}>Check Your Email</Text>
-                <Text style={{ color: C.text2, fontSize: 13, marginBottom: 22 }}>
-                  OTP sent to <Text style={{ color: C.gold, fontWeight: '700' }}>{email}</Text>
+                <Text style={{ color: C.text2, fontSize: 10, fontWeight: '800', letterSpacing: 2, marginBottom: 8 }}>
+                  ENTER ACCESS CODE
                 </Text>
-
-                {!!error && (
-                  <View style={{ backgroundColor: C.red + '18', borderWidth: 1, borderColor: C.red + '50', borderRadius: 14, padding: 14, flexDirection: 'row', gap: 10, alignItems: 'center', marginBottom: 18 }}>
-                    <Text style={{ fontSize: 16 }}>⚠️</Text>
-                    <Text style={{ color: C.red, fontSize: 13, fontWeight: '600', flex: 1 }}>{error}</Text>
-                  </View>
-                )}
-
-                <Text style={{ color: C.text2, fontSize: 10, fontWeight: '800', letterSpacing: 2, marginBottom: 10 }}>ENTER OTP</Text>
                 <TextInput
-                  style={{ backgroundColor: C.bg2, borderWidth: 2, borderColor: C.gold + '70', borderRadius: 18, paddingVertical: 22, paddingHorizontal: 20, fontSize: 42, fontWeight: '900', color: C.text, textAlign: 'center', letterSpacing: 18, marginBottom: 20 }}
-                  placeholder="• • • •" placeholderTextColor={C.text3}
-                  value={otp} onChangeText={t => { setOtp(t.replace(/\D/g, '')); setError(''); }}
-                  keyboardType="number-pad" maxLength={4} autoFocus
+                  style={{
+                    backgroundColor: C.bg2, borderWidth: 2, borderColor: C.gold + '75',
+                    borderRadius: 18, paddingVertical: 18, paddingHorizontal: 16,
+                    fontSize: 26, fontWeight: '900', color: C.gold, textAlign: 'center',
+                    letterSpacing: 6, marginBottom: 18,
+                  }}
+                  placeholder="e.g. 7X9K2M4P"
+                  placeholderTextColor={C.text3}
+                  value={accessCode}
+                  onChangeText={t => { setAccessCode(t.toUpperCase()); setCodeError(''); }}
+                  maxLength={8}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
                 />
-                <PrimaryBtn label="Verify & Enter" onPress={handleOTP} loading={loading} />
-                <TouchableOpacity onPress={() => { setPhase('form'); setOtp(''); setError(''); }} style={{ marginTop: 16, alignItems: 'center' }}>
-                  <Text style={{ color: C.text2, fontWeight: '600', fontSize: 14 }}>← Go Back</Text>
-                </TouchableOpacity>
-              </>
+
+                <PrimaryBtn
+                  label="Enter Workspace →"
+                  onPress={handleCodeLogin}
+                  loading={codeLoading}
+                />
+
+                <View style={{ marginTop: 16, backgroundColor: C.bg2, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: C.border }}>
+                  <Text style={{ color: C.text3, fontSize: 11, textAlign: 'center', lineHeight: 16 }}>
+                    💡 Admin generates access codes exclusively on the Web Admin Panel. If your code is expired or rotated, please contact management.
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              /* EMAIL LOGIN / REGISTER FORM */
+              <View>
+                {/* Secondary Tab switcher */}
+                <View style={{ flexDirection: 'row', backgroundColor: C.bg2, borderRadius: 14, padding: 3, marginBottom: 20, borderWidth: 1, borderColor: C.border }}>
+                  {(['login', 'register'] as const).map(m => (
+                    <TouchableOpacity key={m} onPress={() => switchMode(m)} activeOpacity={0.8} style={{
+                      flex: 1, paddingVertical: 8, borderRadius: 10, alignItems: 'center',
+                      backgroundColor: mode === m ? C.gold + '25' : 'transparent',
+                    }}>
+                      <Text style={{ color: mode === m ? C.gold : C.text2, fontWeight: '800', fontSize: 12 }}>
+                        {m === 'login' ? 'Sign In' : 'Register'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {phase === 'form' ? (
+                  <>
+                    <Text style={{ color: C.text, fontSize: 20, fontWeight: '900', marginBottom: 4 }}>
+                      {mode === 'login' ? 'Welcome Back 👋' : 'Create Account'}
+                    </Text>
+                    <Text style={{ color: C.text2, fontSize: 12, marginBottom: 18 }}>
+                      {mode === 'login' ? 'Sign in with your email & password' : 'Register for access'}
+                    </Text>
+
+                    {!!error && (
+                      <View style={{ backgroundColor: C.red + '18', borderWidth: 1, borderColor: C.red + '50', borderRadius: 14, padding: 14, flexDirection: 'row', gap: 10, alignItems: 'center', marginBottom: 16 }}>
+                        <Text style={{ fontSize: 16 }}>⚠️</Text>
+                        <Text style={{ color: C.red, fontSize: 13, fontWeight: '600', flex: 1 }}>{error}</Text>
+                      </View>
+                    )}
+
+                    <InputField label="EMAIL ADDRESS" placeholder="your@email.com" value={email}
+                      onChangeText={(t: string) => { setEmail(t); setError(''); }}
+                      keyboardType="email-address" autoCapitalize="none" autoCorrect={false} />
+                    <InputField label="PASSWORD" placeholder="Min 6 characters" value={password}
+                      onChangeText={(t: string) => { setPassword(t); setError(''); }}
+                      secureTextEntry autoCapitalize="none" />
+                    <View style={{ marginTop: 8 }}>
+                      <PrimaryBtn label={mode === 'login' ? 'Sign In →' : 'Send OTP →'} onPress={handleSubmit} loading={loading} />
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <Text style={{ color: C.text, fontSize: 20, fontWeight: '900', marginBottom: 4 }}>Verify Your Account</Text>
+                    <Text style={{ color: C.text2, fontSize: 12, marginBottom: 14 }}>
+                      OTP sent to <Text style={{ color: C.gold, fontWeight: '700' }}>{email}</Text>
+                    </Text>
+
+                    {!!devOtp ? (
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => { setOtp(devOtp); setError(''); }}
+                        style={{
+                          backgroundColor: C.gold + '22',
+                          borderWidth: 1.5,
+                          borderColor: C.gold,
+                          borderRadius: 14,
+                          padding: 12,
+                          marginBottom: 16,
+                          alignItems: 'center',
+                        }}
+                      >
+                        <Text style={{ color: C.gold, fontSize: 14, fontWeight: '900' }}>
+                          🔑 Verification Code: {devOtp}
+                        </Text>
+                        <Text style={{ color: C.text2, fontSize: 11, marginTop: 3 }}>
+                          Tap here to auto-fill code
+                        </Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={{ backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: 10, marginBottom: 14, alignItems: 'center' }}>
+                        <Text style={{ color: C.text2, fontSize: 11 }}>
+                          Test / Fallback code: <Text style={{ color: C.gold, fontWeight: '800' }}>1234</Text>
+                        </Text>
+                      </View>
+                    )}
+
+                    {!!error && (
+                      <View style={{ backgroundColor: C.red + '18', borderWidth: 1, borderColor: C.red + '50', borderRadius: 14, padding: 14, flexDirection: 'row', gap: 10, alignItems: 'center', marginBottom: 16 }}>
+                        <Text style={{ fontSize: 16 }}>⚠️</Text>
+                        <Text style={{ color: C.red, fontSize: 13, fontWeight: '600', flex: 1 }}>{error}</Text>
+                      </View>
+                    )}
+
+                    <Text style={{ color: C.text2, fontSize: 10, fontWeight: '800', letterSpacing: 2, marginBottom: 10 }}>ENTER OTP</Text>
+                    <TextInput
+                      style={{ backgroundColor: C.bg2, borderWidth: 2, borderColor: C.gold + '70', borderRadius: 18, paddingVertical: 18, paddingHorizontal: 20, fontSize: 36, fontWeight: '900', color: C.text, textAlign: 'center', letterSpacing: 14, marginBottom: 18 }}
+                      placeholder="• • • •" placeholderTextColor={C.text3}
+                      value={otp} onChangeText={t => { setOtp(t.replace(/\D/g, '')); setError(''); }}
+                      keyboardType="number-pad" maxLength={4} autoFocus
+                    />
+                    <PrimaryBtn label="Verify & Enter →" onPress={handleOTP} loading={loading} />
+                    <TouchableOpacity onPress={() => { setPhase('form'); setOtp(''); setError(''); }} style={{ marginTop: 14, alignItems: 'center' }}>
+                      <Text style={{ color: C.text2, fontWeight: '600', fontSize: 13 }}>← Go Back</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
             )}
           </Animated.View>
 
-          <Text style={{ color: C.text3, fontSize: 11, marginTop: 30 }}>
+          <Text style={{ color: C.text3, fontSize: 11, marginTop: 24 }}>
             made by <Text style={{ color: C.gold, fontWeight: '700' }}>mac studio hub</Text>
           </Text>
         </Animated.View>
@@ -1625,14 +2393,53 @@ function LoginScreen({ onLogin }: { onLogin: (role: string, userId?: string | nu
 export default function App() {
   const [role, setRole] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [accessCode, setAccessCode] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
     Promise.all([
       AsyncStorage.getItem('ramsun_user_role'),
       AsyncStorage.getItem('ramsun_user_id'),
+      AsyncStorage.getItem('ramsun_access_code'),
     ])
-      .then(async ([r, uId]) => {
+      .then(async ([r, uId, aCode]) => {
+        // If user logged in with an access code:
+        if (aCode && r) {
+          try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 6000);
+            const vRes = await fetch(`${API_URL}/auth/validate-code?code=${aCode}`, { signal: controller.signal });
+            clearTimeout(timeout);
+            if (vRes.status === 401 || vRes.status === 403 || vRes.status === 404) {
+              await AsyncStorage.removeItem('ramsun_user_role').catch(() => {});
+              await AsyncStorage.removeItem('ramsun_access_code').catch(() => {});
+              setRole(null);
+              setAccessCode(null);
+              setChecking(false);
+              return;
+            }
+            const d = await vRes.json().catch(() => ({}));
+            if (d && d.valid === false) {
+              await AsyncStorage.removeItem('ramsun_user_role').catch(() => {});
+              await AsyncStorage.removeItem('ramsun_access_code').catch(() => {});
+              setRole(null);
+              setAccessCode(null);
+              setChecking(false);
+              return;
+            }
+            setRole(d.role || r);
+            setAccessCode(aCode);
+            setChecking(false);
+            return;
+          } catch (e) {
+            setRole(r);
+            setAccessCode(aCode);
+            setChecking(false);
+            return;
+          }
+        }
+
+        // If user logged in with email/password:
         if (r && uId) {
           if (r !== 'admin') {
             try {
@@ -1641,7 +2448,6 @@ export default function App() {
               const vRes = await fetch(`${API_URL}/auth/validate?user_id=${uId}`, { signal: controller.signal });
               clearTimeout(timeout);
               if (vRes.status === 401 || vRes.status === 403 || vRes.status === 404) {
-                // Account removed by admin! Purge local state
                 await AsyncStorage.removeItem('ramsun_user_role').catch(() => {});
                 await AsyncStorage.removeItem('ramsun_user_id').catch(() => {});
                 setRole(null);
@@ -1649,9 +2455,7 @@ export default function App() {
                 setChecking(false);
                 return;
               }
-            } catch (e) {
-              // Network timeout or offline: allow proceeding
-            }
+            } catch (e) {}
           }
           setRole(r);
           setUserId(uId);
@@ -1659,21 +2463,26 @@ export default function App() {
           setRole(r);
           setUserId(uId);
         } else {
-          // If employee role is stored but user_id is missing, force a clean login so user_id is properly established
-          AsyncStorage.removeItem('ramsun_user_role').catch(() => {});
-          AsyncStorage.removeItem('ramsun_user_id').catch(() => {});
+          await AsyncStorage.removeItem('ramsun_user_role').catch(() => {});
+          await AsyncStorage.removeItem('ramsun_user_id').catch(() => {});
+          await AsyncStorage.removeItem('ramsun_access_code').catch(() => {});
           setRole(null);
           setUserId(null);
+          setAccessCode(null);
         }
         setChecking(false);
       })
       .catch(() => setChecking(false));
   }, []);
 
-  const handleLogin = async (r: string, uId?: string | number) => {
-    await AsyncStorage.setItem('ramsun_user_role', r).catch(() => { });
+  const handleLogin = async (r: string, uId?: string | number | null, aCode?: string | null) => {
+    await AsyncStorage.setItem('ramsun_user_role', r).catch(() => {});
+    if (aCode) {
+      await AsyncStorage.setItem('ramsun_access_code', aCode).catch(() => {});
+      setAccessCode(aCode);
+    }
     if (uId) {
-      await AsyncStorage.setItem('ramsun_user_id', String(uId)).catch(() => { });
+      await AsyncStorage.setItem('ramsun_user_id', String(uId)).catch(() => {});
       setUserId(String(uId));
     }
     setRole(r);
@@ -1682,8 +2491,10 @@ export default function App() {
   const handleLogout = async () => {
     await AsyncStorage.removeItem('ramsun_user_role').catch(() => {});
     await AsyncStorage.removeItem('ramsun_user_id').catch(() => {});
+    await AsyncStorage.removeItem('ramsun_access_code').catch(() => {});
     setRole(null);
     setUserId(null);
+    setAccessCode(null);
   };
 
   if (checking) {
@@ -1696,6 +2507,6 @@ export default function App() {
   }
 
   return role
-    ? <DashboardScreen role={role} userId={userId} onLogout={handleLogout} />
+    ? <DashboardScreen role={role} userId={userId} accessCode={accessCode} onLogout={handleLogout} />
     : <LoginScreen onLogin={handleLogin} />;
 }

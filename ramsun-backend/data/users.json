@@ -1,0 +1,37 @@
+[
+  {
+    "id": 1,
+    "email": "admin@ramsun.com",
+    "password": "$2b$10$ecKMHg7g4/CfrQ2BVNBCCu2LFqZsuUewd5J4C2Dsg6wLNXYvI0nzO",
+    "role": "admin",
+    "created_at": "2026-10-01T18:07:22.885Z"
+  },
+  {
+    "id": 2,
+    "email": "team@ramsun.com",
+    "password": "$2b$10$ecKMHg7g4/CfrQ2BVNBCCu2LFqZsuUewd5J4C2Dsg6wLNXYvI0nzO",
+    "role": "solar_team",
+    "created_at": "2026-10-01T18:07:22.887Z"
+  },
+  {
+    "id": 3,
+    "email": "office@ramsun.com",
+    "password": "$2b$10$ecKMHg7g4/CfrQ2BVNBCCu2LFqZsuUewd5J4C2Dsg6wLNXYvI0nzO",
+    "role": "back_office",
+    "created_at": "2026-10-01T18:07:22.887Z"
+  },
+  {
+    "id": 65401,
+    "email": "newuser@gmail.com",
+    "password": "$2b$10$pK8RlDrEkO1Ckcx6q9EYPuM7Mm.wU4OCXY8HejjyDv9wIR5YrJBga",
+    "role": "employee",
+    "created_at": "2026-10-01T18:07:45.405Z"
+  },
+  {
+    "id": 44138,
+    "email": "sagardhiman45605@gmail.com",
+    "password": "$2b$10$kDSs.dA51uOtKWEZj42CWOct6PUWDJo/dOXaRZNSjS95Z8b9KQ0L6",
+    "role": "employee",
+    "created_at": "2026-10-01T18:19:04.141Z"
+  }
+]
