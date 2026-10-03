@@ -33,20 +33,21 @@ jobs:
       - name: Install dependencies
         run: |
           cd ramsun-mobile
-          npm install
+          npm install --legacy-peer-deps
 
       - name: Generate Android project (Expo Prebuild)
         run: |
           cd ramsun-mobile
-          npx expo prebuild --platform android --clean
+          npx --yes expo prebuild --platform android --clean
 
       - name: Build APK (Release)
         run: |
           cd ramsun-mobile/android
-          ./gradlew assembleRelease
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: ramsun-mobile/android/app/build/outputs/apk/release/app-release.apk
+          path: ramsun-mobile/android/app/build/outputs/apk/release/*.apk
