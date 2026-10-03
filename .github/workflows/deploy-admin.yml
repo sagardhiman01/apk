@@ -41,7 +41,7 @@ jobs:
           path: ramsun-admin/dist/
 
       - name: Deploy to Hostinger via FTP
-        if: ${{ secrets.FTP_HOST != '' }}
+        if: secrets.FTP_HOST != ''
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_HOST }}
