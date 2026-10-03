@@ -44,7 +44,11 @@ try {
   console.error('Error ensuring uploads directory:', e);
 }
 
-app.use('/uploads', express.static(uploadsDir));
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'private, max-age=86400');
+  next();
+}, express.static(uploadsDir));
 
 // Multer Setup for File Uploads
 const storage = multer.diskStorage({
@@ -394,10 +398,69 @@ const ADMIN_SECRET_TOKEN = process.env.ADMIN_SECRET_KEY || 'ramsun_admin_sec_994
 
 function requireAdmin(req, res, next) {
   const token = req.headers['x-admin-token'] || (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
-  if (token === ADMIN_SECRET_TOKEN || token === 'fake-admin-token-123' || token === 'ramsun_admin_sec_99473372_vault') {
+  if (token && (token === ADMIN_SECRET_TOKEN || token === 'ramsun_admin_sec_99473372_vault')) {
     return next();
   }
   return res.status(401).json({ error: 'Unauthorized: Admin authentication required!' });
+}
+
+async function requireAuthOrWorker(req, res, next) {
+  // 1. Check Admin Token
+  const token = req.headers['x-admin-token'] || (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+  if (token && (token === ADMIN_SECRET_TOKEN || token === 'ramsun_admin_sec_99473372_vault')) {
+    req.auth = { role: 'admin', isAdmin: true };
+    return next();
+  }
+
+  // 2. Check Worker Access Code
+  const accessCode = (req.headers['x-access-code'] || req.query.access_code || req.body?.access_code || '').trim().toUpperCase();
+  if (accessCode) {
+    let role = null;
+    try {
+      const [rows] = await getPool().query('SELECT role FROM access_codes WHERE code = ?', [accessCode]);
+      if (rows.length > 0) role = rows[0].role;
+    } catch (e) {}
+
+    if (!role) {
+      const localCodes = readJsonFile(accessCodesFile, []);
+      const found = localCodes.find(c => c.code === accessCode);
+      if (found) role = found.role;
+    }
+
+    if (role) {
+      req.auth = { role, isWorker: true, accessCode };
+      return next();
+    } else {
+      return res.status(401).json({ error: 'Invalid or revoked access code', revoked: true });
+    }
+  }
+
+  // 3. Check User ID (Employee / Client session)
+  const userId = req.headers['x-user-id'] || req.query.user_id || req.body?.user_id;
+  if (userId) {
+    const parsedUid = parseInt(userId);
+    if (!isNaN(parsedUid) && parsedUid > 0) {
+      let user = null;
+      try {
+        const [users] = await getPool().query('SELECT id, email, role FROM users WHERE id = ?', [parsedUid]);
+        if (users.length > 0) user = users[0];
+      } catch (e) {}
+
+      if (!user) {
+        const localUsers = readJsonFile(usersFile, []);
+        user = localUsers.find(u => u.id === parsedUid);
+      }
+
+      if (user) {
+        req.auth = { user, role: user.role, isUser: true, userId: user.id };
+        return next();
+      } else {
+        return res.status(401).json({ error: 'User account not found or revoked', revoked: true });
+      }
+    }
+  }
+
+  return res.status(401).json({ error: 'Unauthorized: Authentication required (Admin token, Access Code, or User ID)' });
 }
 
 app.post('/api/auth/admin-login', authLimiter, async (req, res) => {
@@ -597,20 +660,25 @@ app.post('/api/auth/users/bulk-delete', requireAdmin, async (req, res) => {
 // Also apply authLimiter to the existing /api/auth/login and OTP routes
 // (We will update those further down, but for now just replacing the header)
 // Helper function to strictly filter projects by role, tenant, search, and status
-function filterProjectList(projects, { role, user_id, search, status }) {
+function filterProjectList(projects, { role, user_id, search, status, auth }) {
   let list = Array.isArray(projects) ? [...projects] : [];
 
+  const effectiveRole = (auth?.role || role || '').toLowerCase();
+  const effectiveUserId = auth?.userId || user_id;
+
   // 1. Tenant Isolation (Employees / Clients only see their own projects)
-  if (user_id) {
-    const parsedUid = parseInt(user_id);
-    list = list.filter(p => p.user_id === parsedUid || String(p.user_id) === String(user_id));
-  } else if (role === 'employee' || role === 'client') {
-    return [];
+  if (auth?.isUser || effectiveRole === 'employee' || effectiveRole === 'client') {
+    if (effectiveUserId) {
+      const parsedUid = parseInt(effectiveUserId);
+      list = list.filter(p => p.user_id === parsedUid || String(p.user_id) === String(effectiveUserId));
+    } else {
+      return [];
+    }
   }
 
-  // 2. Strict Department Isolation
-  if (role && role !== 'admin' && role !== 'employee' && role !== 'client') {
-    const r = String(role).toLowerCase();
+  // 2. Strict Department Isolation for Workers
+  if (effectiveRole && effectiveRole !== 'admin' && effectiveRole !== 'employee' && effectiveRole !== 'client') {
+    const r = effectiveRole;
     if (r === 'bo_registration' || r === 'registration') {
       list = list.filter(p => (parseInt(p.step || 1) === 1) && !p.needs_upcl && !(p.status && p.status.toUpperCase().includes('UPCL')));
     } else if (r === 'bo_upcl' || r === 'upcl') {
@@ -659,17 +727,22 @@ function filterProjectList(projects, { role, user_id, search, status }) {
   return list;
 }
 
-app.get('/api/projects', async (req, res) => {
+app.get('/api/projects', requireAuthOrWorker, async (req, res) => {
   try {
-    const { search, status, user_id, role } = req.query;
+    const { search, status } = req.query;
+    const role = req.auth?.isAdmin ? req.query.role : req.auth?.role;
+    const user_id = req.auth?.isAdmin ? req.query.user_id : (req.auth?.userId || req.query.user_id);
     let allProjects = [];
 
     try {
-      if (user_id) {
+      if (user_id && !req.auth?.isAdmin) {
         const parsedUid = parseInt(user_id);
         const [uCheck] = await getPool().query('SELECT id FROM users WHERE id = ?', [parsedUid]);
         if (uCheck.length === 0) {
-          return res.status(401).json({ error: 'Account has been removed or deactivated', revoked: true });
+          const localUsers = readJsonFile(usersFile, []);
+          if (!localUsers.some(u => u.id === parsedUid)) {
+            return res.status(401).json({ error: 'Account has been removed or deactivated', revoked: true });
+          }
         }
       }
       const [rows] = await getPool().query('SELECT * FROM projects ORDER BY created_at DESC');
@@ -682,16 +755,109 @@ app.get('/api/projects', async (req, res) => {
       allProjects = readJsonFile(projectsFile, []);
     }
 
-    const filtered = filterProjectList(allProjects, { role, user_id, search, status });
+    const filtered = filterProjectList(allProjects, { role, user_id, search, status, auth: req.auth });
     res.json(filtered);
   } catch (error) {
     console.warn('Error fetching projects (DB offline?):', error.message);
     const localProjects = readJsonFile(projectsFile, []);
-    res.json(filterProjectList(localProjects, { role: req.query.role, user_id: req.query.user_id, search: req.query.search, status: req.query.status }));
+    const role = req.auth?.isAdmin ? req.query.role : req.auth?.role;
+    const user_id = req.auth?.isAdmin ? req.query.user_id : (req.auth?.userId || req.query.user_id);
+    res.json(filterProjectList(localProjects, { role, user_id, search: req.query.search, status: req.query.status, auth: req.auth }));
   }
 });
 
-app.post('/api/projects', async (req, res) => {
+app.get('/api/projects/export', requireAuthOrWorker, async (req, res) => {
+  try {
+    const { search, status } = req.query;
+    const role = req.auth?.isAdmin ? req.query.role : req.auth?.role;
+    const user_id = req.auth?.isAdmin ? req.query.user_id : (req.auth?.userId || req.query.user_id);
+    let allProjects = [];
+
+    try {
+      const [rows] = await getPool().query('SELECT * FROM projects ORDER BY created_at DESC');
+      const localProjects = readJsonFile(projectsFile, []);
+      const map = new Map();
+      rows.forEach(p => map.set(p.id, p));
+      localProjects.forEach(p => { if (!map.has(p.id)) map.set(p.id, p); });
+      allProjects = Array.from(map.values());
+    } catch (dbErr) {
+      allProjects = readJsonFile(projectsFile, []);
+    }
+
+    const filtered = filterProjectList(allProjects, { role, user_id, search, status, auth: req.auth });
+
+    const headers = [
+      'Client ID',
+      'Customer Name',
+      'Contact Number',
+      'Email',
+      'Address',
+      'Site Location',
+      'Capacity (kW)',
+      'Aadhar Number',
+      'PAN Number',
+      'Meter Number',
+      'Workflow Step',
+      'Current Status',
+      'Loan Approved',
+      'UPCL Issue',
+      'Transfer Remarks',
+      'Transferred By',
+      'Created Date',
+      'Quotation Doc URL',
+      'Agreement Doc URL',
+      'Site Photo URL',
+      'Inst Photo 1 URL',
+      'Inst Photo 2 URL',
+      'DCR',
+    ];
+
+    const escapeCsv = (val) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const rows = filtered.map(p => [
+      escapeCsv(p.client_id ? `#${p.client_id}` : `#${p.id}`),
+      escapeCsv(p.customer_name || p.customer || ''),
+      escapeCsv(p.contact_number || p.phone || ''),
+      escapeCsv(p.email || ''),
+      escapeCsv(p.address || ''),
+      escapeCsv(p.site_location || ''),
+      escapeCsv(p.kw_capacity || p.capacity || ''),
+      escapeCsv(p.aadhar_number || ''),
+      escapeCsv(p.pan_number || ''),
+      escapeCsv(p.meter_number || ''),
+      escapeCsv(p.step || 1),
+      escapeCsv(p.status || ''),
+      escapeCsv(p.loan_approved ? 'Yes' : 'No'),
+      escapeCsv(p.needs_upcl ? 'Yes' : 'No'),
+      escapeCsv(p.transfer_remarks || ''),
+      escapeCsv(p.transferred_by || ''),
+      escapeCsv(p.created_at ? new Date(p.created_at).toLocaleDateString() : ''),
+      escapeCsv(p.quotation || ''),
+      escapeCsv(p.agreement || ''),
+      escapeCsv(p.site_photo || ''),
+      escapeCsv(p.inst_photo_1 || ''),
+      escapeCsv(p.inst_photo_2 || ''),
+      escapeCsv(p.dcr || ''),
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const bom = Buffer.from([0xEF, 0xBB, 0xBF]);
+    const payload = Buffer.concat([bom, Buffer.from(csvContent, 'utf8')]);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="Ramsun_Solar_Projects_${dateStr}.csv"`);
+    res.status(200).send(payload);
+  } catch (error) {
+    console.error('Export error:', error);
+    res.status(500).json({ error: 'Failed to export projects' });
+  }
+});
+
+app.post('/api/projects', requireAuthOrWorker, async (req, res) => {
   try {
     const customer_name = sanitize(req.body.customer_name);
     const phone = sanitize(req.body.phone);
@@ -702,7 +868,7 @@ app.post('/api/projects', async (req, res) => {
     const site_location = sanitize(req.body.site_location || '');
     const agreement = req.body.agreement || null;
     const quotation = req.body.quotation || null;
-    const user_id = req.body.user_id ? parseInt(req.body.user_id) : null;
+    const user_id = req.body.user_id ? parseInt(req.body.user_id) : (req.auth?.userId || null);
 
     const errors = [];
     if (!customer_name || customer_name.length < 2) errors.push('Customer name is required (min 2 chars)');
@@ -757,7 +923,7 @@ app.post('/api/projects', async (req, res) => {
 });
 
 // Upload Endpoint with detailed error catching
-app.post('/api/upload', (req, res) => {
+app.post('/api/upload', requireAuthOrWorker, (req, res) => {
   upload.single('file')(req, res, (err) => {
     if (err) {
       console.error('Upload error in multer:', err);
@@ -770,7 +936,7 @@ app.post('/api/upload', (req, res) => {
   });
 });
 
-app.put('/api/projects/:id/step', async (req, res) => {
+app.put('/api/projects/:id/step', requireAuthOrWorker, async (req, res) => {
   try {
     const { id } = req.params;
     const { step, status, failed_document, rejection_reason, bank_remarks, transfer_remarks, transferred_by, previous_step } = req.body;
@@ -852,7 +1018,7 @@ app.put('/api/projects/:id/step', async (req, res) => {
 });
 
 // Dedicated Transfer Endpoint (Worker to Worker / Step 1 to 10 bidirectional)
-app.post('/api/projects/:id/transfer', async (req, res) => {
+app.post('/api/projects/:id/transfer', requireAuthOrWorker, async (req, res) => {
   try {
     const { id } = req.params;
     const { to_step, status, reason, transferred_by } = req.body;
@@ -922,7 +1088,7 @@ app.post('/api/projects/:id/transfer', async (req, res) => {
 });
 
 // Get Project Transfer History
-app.get('/api/projects/:id/transfers', async (req, res) => {
+app.get('/api/projects/:id/transfers', requireAuthOrWorker, async (req, res) => {
   try {
     const { id } = req.params;
     try {
@@ -943,19 +1109,19 @@ app.get('/api/projects/:id/transfers', async (req, res) => {
 });
 
 // Edit Applicant Details Endpoint
-app.put('/api/projects/:id', async (req, res) => {
+app.put('/api/projects/:id', requireAuthOrWorker, async (req, res) => {
   try {
     const { id } = req.params;
-    const { customer_name, address, contact_number, kw_capacity, aadhar_number, pan_number, meter_number } = req.body;
+    const { customer_name, address, site_location, contact_number, kw_capacity, aadhar_number, pan_number, meter_number } = req.body;
     
-    updateLocalProject(id, { customer_name, address, contact_number, kw_capacity, aadhar_number, pan_number, meter_number });
+    updateLocalProject(id, { customer_name, address, site_location, contact_number, kw_capacity, aadhar_number, pan_number, meter_number });
 
     try {
       await getPool().query(
         `UPDATE projects 
-         SET customer_name = ?, address = ?, contact_number = ?, kw_capacity = ?, aadhar_number = ?, pan_number = ?, meter_number = ?
+         SET customer_name = ?, address = ?, site_location = ?, contact_number = ?, kw_capacity = ?, aadhar_number = ?, pan_number = ?, meter_number = ?
          WHERE id = ?`,
-        [customer_name, address, contact_number, kw_capacity, aadhar_number, pan_number, meter_number, id]
+        [customer_name, address, site_location || null, contact_number, kw_capacity, aadhar_number, pan_number, meter_number, id]
       );
     } catch (e) {}
 
@@ -967,7 +1133,7 @@ app.put('/api/projects/:id', async (req, res) => {
 });
 
 // Update Project Documents Endpoint
-app.put('/api/projects/:id/document', async (req, res) => {
+app.put('/api/projects/:id/document', requireAuthOrWorker, async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -1095,15 +1261,11 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
 
     res.json({
       success: true,
-      message: emailSent ? 'Real OTP sent to email' : `OTP generated! Verification code: ${otp}`,
-      otp: otp // Included for instant development / fallback verification so user is never blocked
+      message: emailSent ? 'Real OTP sent to your email' : 'OTP generated and sent to your email'
     });
   } catch (error) {
     console.error('Error in register/send-otp:', error);
-    // Even on unexpected error, provide fallback OTP
-    const fallbackOtp = '1234';
-    otpStore.set(req.body?.email?.toLowerCase(), { otp: fallbackOtp, password: req.body?.password || 'password123', expiresAt: Date.now() + 10 * 60 * 1000 });
-    res.json({ success: true, message: 'OTP generated. Verification code: 1234', otp: fallbackOtp });
+    res.status(500).json({ success: false, message: 'Failed to generate registration OTP. Please try again.' });
   }
 });
 
@@ -1122,9 +1284,9 @@ app.get('/api/auth/validate', async (req, res) => {
     if (found) {
       return res.json({ valid: true, user: { id: found.id, email: found.email, role: found.role } });
     }
-    res.json({ valid: true, user: { id: user_id, email: 'user@ramsun.com', role: 'employee' } });
+    return res.status(401).json({ valid: false, revoked: true, error: 'User account not found or revoked' });
   } catch (error) {
-    res.json({ valid: true });
+    res.status(500).json({ valid: false, error: 'Server error' });
   }
 });
 
@@ -1139,10 +1301,17 @@ app.post('/api/auth/verify-register', authLimiter, async (req, res) => {
     }
 
     const storedData = otpStore.get(email);
-    // Allow either the matching OTP or master test OTP '1234'
-    const isMatch = (storedData && storedData.otp === otp) || otp === '1234';
-    if (!isMatch) {
-      return res.status(400).json({ success: false, message: 'Incorrect OTP. Try 1234' });
+    if (!storedData) {
+      return res.status(400).json({ success: false, message: 'OTP expired or not found. Please register again.' });
+    }
+
+    if (Date.now() > storedData.expiresAt) {
+      otpStore.delete(email);
+      return res.status(400).json({ success: false, message: 'OTP has expired. Please request a new one.' });
+    }
+
+    if (storedData.otp !== otp) {
+      return res.status(400).json({ success: false, message: 'Incorrect OTP code. Please try again.' });
     }
 
     // Hash password and insert into DB or local storage
@@ -1195,7 +1364,7 @@ app.get('/api/auth/users', requireAdmin, async (req, res) => {
 
 // ─── Reminders Endpoints (Resilient to offline DB) ───────────────────────────
 
-app.get('/api/reminders', async (req, res) => {
+app.get('/api/reminders', requireAuthOrWorker, async (req, res) => {
   try {
     const query = `
       SELECT r.*, p.customer_name, p.client_id, p.phone 
@@ -1221,7 +1390,7 @@ app.get('/api/reminders', async (req, res) => {
   }
 });
 
-app.post('/api/reminders', async (req, res) => {
+app.post('/api/reminders', requireAuthOrWorker, async (req, res) => {
   try {
     const project_id = parseInt(req.body.project_id);
     const message = sanitize(req.body.message);
@@ -1247,7 +1416,7 @@ app.post('/api/reminders', async (req, res) => {
   }
 });
 
-app.delete('/api/reminders/:id', async (req, res) => {
+app.delete('/api/reminders/:id', requireAuthOrWorker, async (req, res) => {
   try {
     const { id } = req.params;
     deleteLocalReminder(id);
@@ -1455,10 +1624,6 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 
     let isMatch = await bcrypt.compare(password, user.password).catch(() => false);
     if (!isMatch && (user.role === 'admin' || email === 'admin@ramsun.com') && (password === masterPass || password === 'admin')) {
-      isMatch = true;
-    }
-    // Also allow master fallback 'password123'
-    if (!isMatch && (password === 'password123' || password === 'admin')) {
       isMatch = true;
     }
 

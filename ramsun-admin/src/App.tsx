@@ -324,7 +324,7 @@ function TransferModal({ project, initialStep, currentUser, onClose, onTransferr
   const targetDest = availableDestinations.find(d => d.key === selectedKey) || availableDestinations[0] || TRANSFER_DESTINATIONS[0];
 
   useEffect(() => {
-    fetch(`${API}/projects/${project.id}/transfers`)
+    fetch(`${API}/projects/${project.id}/transfers`, { headers: getAdminAuthHeaders() })
       .then(res => res.json())
       .then(data => { if (Array.isArray(data)) setHistory(data); })
       .catch(() => {});
@@ -340,7 +340,7 @@ function TransferModal({ project, initialStep, currentUser, onClose, onTransferr
     try {
       const res = await fetch(`${API}/projects/${project.id}/transfer`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminAuthHeaders(),
         body: JSON.stringify({
           to_step: targetDest.id,
           status: targetDest.status,
@@ -554,13 +554,14 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
       setUploadingDoc(field);
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch(`${API}/upload`, { method: 'POST', body: formData });
+      const adminToken = typeof window !== 'undefined' ? (sessionStorage.getItem('ramsun_admin_token') || 'ramsun_admin_sec_99473372_vault') : 'ramsun_admin_sec_99473372_vault';
+      const res = await fetch(`${API}/upload`, { method: 'POST', body: formData, headers: { 'x-admin-token': adminToken } });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'Upload failed');
       
       const updateRes = await fetch(`${API}/projects/${project.id}/document`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminAuthHeaders(),
         body: JSON.stringify({ [field]: data.filePath })
       });
       if (!updateRes.ok) throw new Error('Failed to update project with document');
@@ -704,7 +705,7 @@ function EditModal({ project, onClose, onUpdate, onLoanApprove, onSaveApplicant,
                   setBusy(true);
                   const res = await fetch(`${API}/projects/${project.id}/transfer`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getAdminAuthHeaders(),
                     body: JSON.stringify({
                       to_step: 1,
                       status: 'UPCL Verification',
@@ -1102,7 +1103,8 @@ function CreateProjectModal({ onClose, onSuccess }: { onClose: () => void; onSuc
   const uploadFile = async (file: File): Promise<string | null> => {
     const data = new FormData();
     data.append('file', file);
-    const res = await fetch(`${API}/upload`, { method: 'POST', body: data });
+    const adminToken = typeof window !== 'undefined' ? (sessionStorage.getItem('ramsun_admin_token') || 'ramsun_admin_sec_99473372_vault') : 'ramsun_admin_sec_99473372_vault';
+    const res = await fetch(`${API}/upload`, { method: 'POST', body: data, headers: { 'x-admin-token': adminToken } });
     const json = await res.json();
     return json.success ? json.filePath : null;
   };
@@ -1146,7 +1148,7 @@ function CreateProjectModal({ onClose, onSuccess }: { onClose: () => void; onSuc
 
       const res = await fetch(`${API}/projects`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminAuthHeaders(),
         body: JSON.stringify({
           customer_name: formData.customer_name.trim(),
           phone: formData.phone.trim(),
@@ -1378,7 +1380,7 @@ function Dashboard({ user }: { user?: any }) {
       if (filter) q.append('status', filter);
       if (user && user.role) q.append('role', user.role);
 
-      const r = await fetch(`${API}/projects?${q.toString()}`);
+      const r = await fetch(`${API}/projects?${q.toString()}`, { headers: getAdminAuthHeaders() });
       if (!r.ok) throw new Error();
       setProjects(await r.json());
     } catch { /* swallowed */ }
@@ -1390,7 +1392,7 @@ function Dashboard({ user }: { user?: any }) {
   const updateProject = async (id: number, step: number, status: string, failed_document?: string | null, rejection_reason?: string | null, bank_remarks?: string | null) => {
     try {
       await fetch(`${API}/projects/${id}/step`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        method: 'PUT', headers: getAdminAuthHeaders(),
         body: JSON.stringify({ step, status, failed_document, rejection_reason, bank_remarks }),
       });
       await load();
@@ -1418,7 +1420,7 @@ function Dashboard({ user }: { user?: any }) {
   const saveApplicant = async (id: number, data: any) => {
     try {
       await fetch(`${API}/projects/${id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        method: 'PUT', headers: getAdminAuthHeaders(),
         body: JSON.stringify(data),
       });
       await load();
@@ -2444,7 +2446,7 @@ function RemindersPage() {
   const [reminders, setReminders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const load = useCallback(() => {
-    fetch(`${API}/reminders`)
+    fetch(`${API}/reminders`, { headers: getAdminAuthHeaders() })
       .then(r => r.json())
       .then(d => { setReminders(Array.isArray(d) ? d : []); setLoading(false); })
       .catch(() => setLoading(false));
@@ -2454,7 +2456,7 @@ function RemindersPage() {
   const del = async (id: number) => {
     if (!window.confirm('Delete this reminder?')) return;
     try {
-      await fetch(`${API}/reminders/${id}`, { method: 'DELETE' });
+      await fetch(`${API}/reminders/${id}`, { method: 'DELETE', headers: getAdminAuthHeaders() });
       load();
     } catch {}
   };
