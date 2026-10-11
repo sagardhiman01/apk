@@ -303,7 +303,7 @@ function writeJsonFile(file, data) {
 function updateLocalProject(id, updates) {
   const numericId = parseInt(id);
   const localProjects = readJsonFile(projectsFile, []);
-  const index = localProjects.findIndex(p => p.id === numericId || String(p.id) === String(id));
+  const index = localProjects.findIndex(p => p.id === numericId || String(p.id) === String(id) || (p.client_id && String(p.client_id) === String(id)));
   if (index !== -1) {
     localProjects[index] = { ...localProjects[index], ...updates };
     writeJsonFile(projectsFile, localProjects);
@@ -315,7 +315,7 @@ function updateLocalProject(id, updates) {
 function deleteLocalProject(id) {
   const numericId = parseInt(id);
   let localProjects = readJsonFile(projectsFile, []);
-  localProjects = localProjects.filter(p => p.id !== numericId && String(p.id) !== String(id));
+  localProjects = localProjects.filter(p => p.id !== numericId && String(p.id) !== String(id) && (!p.client_id || String(p.client_id) !== String(id)));
   writeJsonFile(projectsFile, localProjects);
 }
 
@@ -748,8 +748,12 @@ app.get('/api/projects', requireAuthOrWorker, async (req, res) => {
       const [rows] = await getPool().query('SELECT * FROM projects ORDER BY created_at DESC');
       const localProjects = readJsonFile(projectsFile, []);
       const map = new Map();
-      rows.forEach(p => map.set(p.id, p));
-      localProjects.forEach(p => { if (!map.has(p.id)) map.set(p.id, p); });
+      const getKey = (p) => p.client_id ? `cid_${p.client_id}` : `id_${p.id}`;
+      rows.forEach(p => map.set(getKey(p), p));
+      localProjects.forEach(p => {
+        const key = getKey(p);
+        if (!map.has(key)) map.set(key, p);
+      });
       allProjects = Array.from(map.values());
     } catch (dbErr) {
       allProjects = readJsonFile(projectsFile, []);
@@ -777,8 +781,12 @@ app.get('/api/projects/export', requireAuthOrWorker, async (req, res) => {
       const [rows] = await getPool().query('SELECT * FROM projects ORDER BY created_at DESC');
       const localProjects = readJsonFile(projectsFile, []);
       const map = new Map();
-      rows.forEach(p => map.set(p.id, p));
-      localProjects.forEach(p => { if (!map.has(p.id)) map.set(p.id, p); });
+      const getKey = (p) => p.client_id ? `cid_${p.client_id}` : `id_${p.id}`;
+      rows.forEach(p => map.set(getKey(p), p));
+      localProjects.forEach(p => {
+        const key = getKey(p);
+        if (!map.has(key)) map.set(key, p);
+      });
       allProjects = Array.from(map.values());
     } catch (dbErr) {
       allProjects = readJsonFile(projectsFile, []);
@@ -880,6 +888,19 @@ app.post('/api/projects', requireAuthOrWorker, async (req, res) => {
     let client_id = generateClientId();
     let newProjectId = Date.now() % 1000000;
 
+    // Try DB first so real insertId is assigned
+    try {
+      const [result] = await getPool().query(
+        'INSERT INTO projects (user_id, client_id, customer_name, phone, email, address, capacity, status, step, site_photo, site_location, agreement, quotation) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [user_id, client_id, customer_name, phone, email.toLowerCase(), address, capacity, 'Document Upload', 1, site_photo, site_location || null, agreement, quotation]
+      );
+      if (result && result.insertId) {
+        newProjectId = result.insertId;
+      }
+    } catch (dbErr) {
+      console.warn('MySQL offline, saved project to projects.json:', dbErr.message);
+    }
+
     const projectData = {
       id: newProjectId,
       user_id,
@@ -899,21 +920,15 @@ app.post('/api/projects', requireAuthOrWorker, async (req, res) => {
       created_at: new Date().toISOString()
     };
 
-    // Save to local fallback file
+    // Save/sync to local fallback file (deduplicating by client_id)
     const localProjects = readJsonFile(projectsFile, []);
-    localProjects.unshift(projectData);
-    writeJsonFile(projectsFile, localProjects);
-
-    // Also attempt DB insert
-    try {
-      const [result] = await getPool().query(
-        'INSERT INTO projects (user_id, client_id, customer_name, phone, email, address, capacity, status, step, site_photo, site_location, agreement, quotation) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [user_id, client_id, customer_name, phone, email.toLowerCase(), address, capacity, 'Document Upload', 1, site_photo, site_location || null, agreement, quotation]
-      );
-      if (result.insertId) newProjectId = result.insertId;
-    } catch (dbErr) {
-      console.warn('MySQL offline, saved project to projects.json:', dbErr.message);
+    const existingIdx = localProjects.findIndex(p => (p.client_id && p.client_id === client_id) || p.id === newProjectId);
+    if (existingIdx >= 0) {
+      localProjects[existingIdx] = projectData;
+    } else {
+      localProjects.unshift(projectData);
     }
+    writeJsonFile(projectsFile, localProjects);
 
     res.json({ success: true, id: newProjectId, client_id });
   } catch (error) {

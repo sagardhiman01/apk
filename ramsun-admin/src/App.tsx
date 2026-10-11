@@ -1111,6 +1111,7 @@ function CreateProjectModal({ onClose, onSuccess }: { onClose: () => void; onSuc
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
     setError('');
 
     if (!formData.customer_name.trim() || formData.customer_name.trim().length < 2) {
@@ -1385,9 +1386,9 @@ function Dashboard({ user }: { user?: any }) {
       setProjects(await r.json());
     } catch { /* swallowed */ }
     finally { setLoading(false); setSpinning(false); }
-  }, [search, filter]);
+  }, [search, filter, user]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, loc.pathname]);
 
   const updateProject = async (id: number, step: number, status: string, failed_document?: string | null, rejection_reason?: string | null, bank_remarks?: string | null) => {
     try {
@@ -1488,8 +1489,8 @@ function Dashboard({ user }: { user?: any }) {
   };
 
   const displayProjects = projects.filter(p => {
-    const curStep = p.step ?? 1;
-    const isUpcl = p.status?.includes('UPCL') || p.needs_upcl || p.transferred_by === 'upcl';
+    const curStep = parseInt(p.step ?? 1, 10);
+    const isUpcl = Boolean(p.status?.includes('UPCL') || p.needs_upcl == 1 || p.needs_upcl === true || p.transferred_by === 'upcl');
     switch (loc.pathname) {
       case '/upcl':         if (!(curStep === 1 && isUpcl)) return false; break;
       case '/registration': if (!(curStep === 1 && !isUpcl)) return false; break;
@@ -2798,7 +2799,7 @@ function SidebarContent({ user, onLogout, onClose }: { user?: any; onLogout?: ()
       </div>
 
       {/* Nav */}
-      <div className="mt-6 space-y-1.5 flex-1 px-4">
+      <div className="mt-6 space-y-1.5 flex-1 px-4 overflow-y-auto">
         {links.map(({ to, label, icon, end }) => {
           const Ic = Icons[icon as keyof typeof Icons];
           return (

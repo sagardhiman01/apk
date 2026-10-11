@@ -1919,6 +1919,7 @@ function NewProjectModal({ visible, userId, onClose, onSuccess }: { visible: boo
 
 
   const submit = async () => {
+    if (loading) return;
     setLoading(true);
     try {
       let site_photo = null, agreement = null, quotation = null;
@@ -2055,7 +2056,7 @@ function NewProjectModal({ visible, userId, onClose, onSuccess }: { visible: boo
                     <Text style={{ color: C.text, fontWeight: '700' }}>← Back</Text>
                   </TouchableOpacity>
                   <View style={{ flex: 2 }}>
-                    <PrimaryBtn label="Submit Application ✓" onPress={submit} loading={loading} />
+                    <PrimaryBtn label="Submit Application ✓" onPress={submit} loading={loading} disabled={loading} />
                   </View>
                 </View>
               </View>
@@ -2739,7 +2740,20 @@ function LoginScreen({ onLogin }: { onLogin: (role: string, userId?: string | nu
         {particles.map((p, i) => <FloatingParticle key={i} {...p} />)}
       </View>
 
-      <ScrollView contentContainerStyle={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          alignItems: 'center',
+          paddingHorizontal: 20,
+          paddingTop: 36,
+          paddingBottom: 100,
+        }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={true}
+        bounces={true}
+        overScrollMode="always"
+      >
         <Animated.View style={{ opacity: fadeIn, alignItems: 'center', width: '100%' }}>
           {/* Logo */}
           <Animated.View style={{ transform: [{ scale: logoScale }], marginBottom: 18, alignItems: 'center' }}>
