@@ -9,6 +9,8 @@ on:
 jobs:
   build-android:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     env:
       EXPO_PUBLIC_API_URL: https://ramsunenergy.online/api
@@ -51,3 +53,14 @@ jobs:
         with:
           name: app-release
           path: ramsun-mobile/android/app/build/outputs/apk/release/*.apk
+
+      - name: Publish APK to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: latest
+          name: Ramsun Solar Latest APK
+          body: Latest production APK build from main branch
+          files: ramsun-mobile/android/app/build/outputs/apk/release/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

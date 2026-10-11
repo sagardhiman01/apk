@@ -19,3 +19,5 @@ ramsun-mobile/.env
 Thumbs.db
 *.log
 Captures/
+*.apk
+*.zip
