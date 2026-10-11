@@ -1971,6 +1971,13 @@ function UsersPage() {
   const [loadingCodes, setLoadingCodes] = useState(true);
   const [selectedRole, setSelectedRole] = useState('bo_registration');
   const [generating, setGenerating] = useState(false);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  const copyCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2000);
+  };
 
   const fetchUsers = () => {
     fetch(`${API}/auth/users`, { headers: getAdminAuthHeaders() })
@@ -2250,11 +2257,11 @@ function UsersPage() {
             <h1 className="text-xl sm:text-2xl font-black text-slate-800">Access Codes (Passwordless)</h1>
             <p className="text-slate-500 text-sm mt-1">Generate 8-digit codes for employees to log in without passwords</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
             <select
               value={selectedRole}
               onChange={e => setSelectedRole(e.target.value)}
-              className="bg-white border border-slate-200 text-slate-700 text-sm rounded-xl px-3 py-2 outline-none focus:border-yellow-500"
+              className="bg-white border border-slate-200 text-slate-700 font-semibold text-sm rounded-xl px-3.5 py-2.5 outline-none focus:ring-2 focus:ring-yellow-400 w-full sm:w-auto shadow-sm"
             >
               {Object.entries(ROLE_PAGES).map(([role, page]) => (
                 <option key={role} value={role}>{page.label} ({role})</option>
@@ -2263,7 +2270,7 @@ function UsersPage() {
             <button
               onClick={handleGenerate}
               disabled={generating}
-              className="bg-slate-900 text-yellow-400 font-bold text-sm px-4 py-2 rounded-xl shadow-sm hover:bg-slate-800 transition-colors whitespace-nowrap"
+              className="bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-500 hover:to-amber-600 text-slate-950 font-black text-sm px-5 py-2.5 rounded-xl shadow-md transition-all active:scale-95 whitespace-nowrap flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               {generating ? 'Generating...' : '+ Generate Code'}
             </button>
@@ -2277,45 +2284,108 @@ function UsersPage() {
         ) : codes.length === 0 ? (
           <div className="text-center py-12 text-slate-400 bg-white rounded-2xl border border-slate-100">No access codes active. Generate one above.</div>
         ) : (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead><tr className="bg-slate-50 border-b border-slate-100">
-                <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Access Code</th>
-                <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Role</th>
-                <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Created At</th>
-                <th className="text-right px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Actions</th>
-              </tr></thead>
-              <tbody>
-                {codes.map(c => (
-                  <tr key={c.code} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                    <td className="px-5 py-3 font-mono text-slate-800 font-black tracking-widest bg-yellow-50/50">{c.code}</td>
-                    <td className="px-5 py-3">
-                      <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-sky-100 text-sky-700">{c.role}</span>
-                    </td>
-                    <td className="px-5 py-3 text-slate-400 text-xs">{new Date(c.created_at).toLocaleString('en-IN')}</td>
-                    <td className="px-5 py-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => handleRegenerate(c.code, c.role)}
-                          disabled={rotatingCode === c.code}
-                          title="Generate a new code for this role (revokes old employee, keeps all data)"
-                          className="text-amber-700 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300/80 px-2.5 py-1 rounded-lg transition-colors text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                        >
-                          {rotatingCode === c.code ? '↻ Changing...' : '🔄 Change Code'}
-                        </button>
-                        <button
-                          onClick={() => setCodeToRevoke(c.code)}
-                          className="text-red-500 hover:text-red-700 hover:bg-red-50 border border-transparent hover:border-red-200 px-2.5 py-1 rounded-lg transition-colors text-xs font-bold cursor-pointer"
-                        >
-                          Revoke
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {/* Mobile Card View (Clean, responsive, touch-friendly) */}
+            <div className="md:hidden space-y-3">
+              {codes.map(c => (
+                <div key={c.code} className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-base font-black text-slate-900 bg-yellow-100/90 px-3 py-1 rounded-xl tracking-widest border border-yellow-300">
+                        {c.code}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => copyCode(c.code)}
+                        className="text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 active:scale-95 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1"
+                        title="Copy code"
+                      >
+                        {copiedCode === c.code ? '✓ Copied' : '📋 Copy'}
+                      </button>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-sky-100 text-sky-800 shrink-0">
+                      {ROLE_PAGES[c.role]?.label?.split(' ')[0] || c.role}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
+                    <span className="font-semibold text-slate-600 truncate max-w-[60%]">{ROLE_PAGES[c.role]?.label || c.role}</span>
+                    <span className="font-medium text-slate-400">{new Date(c.created_at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                    <button
+                      onClick={() => handleRegenerate(c.code, c.role)}
+                      disabled={rotatingCode === c.code}
+                      title="Generate a new code for this role"
+                      className="flex-1 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300/80 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                    >
+                      {rotatingCode === c.code ? '↻ Changing...' : '🔄 Change Code'}
+                    </button>
+                    <button
+                      onClick={() => setCodeToRevoke(c.code)}
+                      className="py-2.5 px-4 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer"
+                    >
+                      Revoke
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="bg-slate-50 border-b border-slate-100">
+                  <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Access Code</th>
+                  <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Role</th>
+                  <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Created At</th>
+                  <th className="text-right px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Actions</th>
+                </tr></thead>
+                <tbody>
+                  {codes.map(c => (
+                    <tr key={c.code} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                      <td className="px-5 py-3 font-mono text-slate-800 font-black tracking-widest bg-yellow-50/50">
+                        <div className="flex items-center gap-2">
+                          <span>{c.code}</span>
+                          <button
+                            type="button"
+                            onClick={() => copyCode(c.code)}
+                            className="text-[11px] font-bold text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                            title="Copy code"
+                          >
+                            {copiedCode === c.code ? '✓ Copied' : '📋 Copy'}
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-sky-100 text-sky-700">{ROLE_PAGES[c.role]?.label || c.role}</span>
+                      </td>
+                      <td className="px-5 py-3 text-slate-400 text-xs">{new Date(c.created_at).toLocaleString('en-IN')}</td>
+                      <td className="px-5 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleRegenerate(c.code, c.role)}
+                            disabled={rotatingCode === c.code}
+                            title="Generate a new code for this role (revokes old employee, keeps all data)"
+                            className="text-amber-700 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300/80 px-2.5 py-1 rounded-lg transition-colors text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                          >
+                            {rotatingCode === c.code ? '↻ Changing...' : '🔄 Change Code'}
+                          </button>
+                          <button
+                            onClick={() => setCodeToRevoke(c.code)}
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50 border border-transparent hover:border-red-200 px-2.5 py-1 rounded-lg transition-colors text-xs font-bold cursor-pointer"
+                          >
+                            Revoke
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
 
@@ -2362,41 +2432,23 @@ function UsersPage() {
         ) : users.length === 0 ? (
           <div className="text-center py-12 text-slate-400 bg-white rounded-2xl border border-slate-100">No users registered.</div>
         ) : (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-100">
-                  <th className="w-12 px-4 py-3 text-center">
-                    <input
-                      type="checkbox"
-                      checked={isAllSelected}
-                      ref={el => { if (el) el.indeterminate = isSomeSelected; }}
-                      onChange={handleSelectAllToggle}
-                      className="w-4 h-4 rounded text-yellow-500 focus:ring-yellow-400 border-slate-300 cursor-pointer accent-yellow-500"
-                      title="Select all accounts"
-                    />
-                  </th>
-                  <th className="text-left px-3 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">#</th>
-                  <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Email</th>
-                  <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Role</th>
-                  <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Joined</th>
-                  <th className="text-right px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u, i) => {
-                  const isProtected = u.role === 'admin' || u.email === 'admin@ramsun.com';
-                  const isSelected = selectedUserIds.includes(u.id);
-                  return (
-                    <tr
-                      key={u.id}
-                      className={`border-b border-slate-50 transition-colors ${
-                        isSelected ? 'bg-amber-50/70 hover:bg-amber-50' : 'hover:bg-slate-50'
-                      }`}
-                    >
-                      <td className="w-12 px-4 py-3 text-center">
+          <>
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-3">
+              {users.map((u) => {
+                const isProtected = u.role === 'admin' || u.email === 'admin@ramsun.com';
+                const isSelected = selectedUserIds.includes(u.id);
+                return (
+                  <div
+                    key={u.id}
+                    className={`bg-white rounded-2xl p-4 border transition-colors space-y-2.5 ${
+                      isSelected ? 'border-amber-400 bg-amber-50/50' : 'border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
                         {isProtected ? (
-                          <span title="Primary Admin account cannot be deleted" className="text-xs opacity-40 cursor-not-allowed select-none">
+                          <span title="Primary Admin account cannot be deleted" className="text-xs opacity-40 select-none">
                             🔒
                           </span>
                         ) : (
@@ -2407,34 +2459,106 @@ function UsersPage() {
                             className="w-4 h-4 rounded text-yellow-500 focus:ring-yellow-400 border-slate-300 cursor-pointer accent-yellow-500"
                           />
                         )}
-                      </td>
-                      <td className="px-3 py-3 text-slate-400 font-mono text-xs">{i + 1}</td>
-                      <td className="px-5 py-3 font-semibold text-slate-700">{u.email}</td>
-                      <td className="px-5 py-3">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${u.role === 'admin' ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-700'}`}>
-                          {u.role || 'employee'}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-slate-400 text-xs">{u.created_at ? new Date(u.created_at).toLocaleDateString('en-IN') : '—'}</td>
-                      <td className="px-5 py-3 text-right">
-                        {isProtected ? (
-                          <span className="text-xs font-semibold text-slate-400 px-2 py-1 select-none">Protected</span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setUserToDelete({ id: u.id, email: u.email })}
-                            className="text-red-500 hover:text-red-700 hover:bg-red-50 px-2.5 py-1 rounded transition-colors text-xs font-bold cursor-pointer"
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        <p className="text-sm font-bold text-slate-800 truncate">{u.email}</p>
+                      </div>
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold shrink-0 ${u.role === 'admin' ? 'bg-yellow-100 text-yellow-800' : 'bg-slate-100 text-slate-700'}`}>
+                        {u.role || 'employee'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-slate-400 pt-1 border-t border-slate-100">
+                      <span>Joined: {u.created_at ? new Date(u.created_at).toLocaleDateString('en-IN') : '—'}</span>
+                      {isProtected ? (
+                        <span className="text-xs font-semibold text-slate-400">Protected</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setUserToDelete({ id: u.id, email: u.email })}
+                          className="text-red-500 hover:text-red-700 font-bold px-2 py-1 rounded hover:bg-red-50 transition-colors cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-100">
+                    <th className="w-12 px-4 py-3 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isAllSelected}
+                        ref={el => { if (el) el.indeterminate = isSomeSelected; }}
+                        onChange={handleSelectAllToggle}
+                        className="w-4 h-4 rounded text-yellow-500 focus:ring-yellow-400 border-slate-300 cursor-pointer accent-yellow-500"
+                        title="Select all accounts"
+                      />
+                    </th>
+                    <th className="text-left px-3 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">#</th>
+                    <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Email</th>
+                    <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Role</th>
+                    <th className="text-left px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Joined</th>
+                    <th className="text-right px-5 py-3 font-bold text-slate-500 text-xs uppercase tracking-wide">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((u, i) => {
+                    const isProtected = u.role === 'admin' || u.email === 'admin@ramsun.com';
+                    const isSelected = selectedUserIds.includes(u.id);
+                    return (
+                      <tr
+                        key={u.id}
+                        className={`border-b border-slate-50 transition-colors ${
+                          isSelected ? 'bg-amber-50/70 hover:bg-amber-50' : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        <td className="w-12 px-4 py-3 text-center">
+                          {isProtected ? (
+                            <span title="Primary Admin account cannot be deleted" className="text-xs opacity-40 cursor-not-allowed select-none">
+                              🔒
+                            </span>
+                          ) : (
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelectUser(u.id)}
+                              className="w-4 h-4 rounded text-yellow-500 focus:ring-yellow-400 border-slate-300 cursor-pointer accent-yellow-500"
+                            />
+                          )}
+                        </td>
+                        <td className="px-3 py-3 text-slate-400 font-mono text-xs">{i + 1}</td>
+                        <td className="px-5 py-3 font-semibold text-slate-700">{u.email}</td>
+                        <td className="px-5 py-3">
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${u.role === 'admin' ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-700'}`}>
+                            {u.role || 'employee'}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-slate-400 text-xs">{u.created_at ? new Date(u.created_at).toLocaleDateString('en-IN') : '—'}</td>
+                        <td className="px-5 py-3 text-right">
+                          {isProtected ? (
+                            <span className="text-xs font-semibold text-slate-400 px-2 py-1 select-none">Protected</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setUserToDelete({ id: u.id, email: u.email })}
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50 px-2.5 py-1 rounded transition-colors text-xs font-bold cursor-pointer"
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
       
